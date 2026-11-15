@@ -1,0 +1,291 @@
+@import 'tailwindcss';
+@import url('https://fonts.bunny.net/css?family=poppins:400,500,600,700&display=swap');
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../views/**/*.blade.php';
+
+@theme {
+    --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-mono: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+
+    --color-paper: #F4F2EB;
+    --color-paper-soft: #FBFAF6;
+    --color-ink: #14201A;
+    --color-muted: #5B665E;
+    --color-line: #E1DED3;
+    --color-field: #8C978B;
+
+    --color-forest: #17291B;
+    --color-forest-hover: #22382A;
+    --color-forest-line: #2C4A33;
+    --color-forest-text: #D5E0D2;
+    --color-forest-muted: #B7C7B3;
+
+    --color-brand: #366F3A;
+    --color-brand-dark: #2A5A2E;
+    --color-brand-pale: #E9EFE5;
+    --color-alert: #B4470F;
+
+    --color-open: #8DB6E8;
+    --color-nc: #E07B2E;
+    --color-close: #1F5B2A;
+
+    --color-chip-open-bg: #E3EEFB;
+    --color-chip-open-fg: #1B4C8C;
+    --color-chip-nc-bg: #FCE8D8;
+    --color-chip-nc-fg: #8F3F08;
+    --color-chip-close-bg: #E1F0E2;
+    --color-chip-close-fg: #1F5B2A;
+}
+
+@layer components {
+    .form-control {
+        width: 100%;
+        min-height: 48px;
+        border-radius: 10px;
+        border: 1px solid var(--color-field);
+        background-color: #ffffff;
+        padding-left: 0.875rem;
+        padding-right: 0.875rem;
+        font-size: 15px;
+        color: var(--color-ink);
+        transition: border-color 0.15s ease-in-out, outline-color 0.15s ease-in-out;
+    }
+
+    .form-control::placeholder {
+        color: var(--color-muted);
+    }
+
+    .form-control:focus {
+        outline: 2px solid var(--color-brand);
+        outline-offset: 1px;
+        border-color: var(--color-brand);
+    }
+
+    select.form-control,
+    .form-control:is(select) {
+        appearance: none;
+        -webkit-appearance: none;
+        padding-right: 2.5rem;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%235B665E' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+        background-position: right 0.75rem center;
+        background-repeat: no-repeat;
+        background-size: 1.25em 1.25em;
+    }
+
+    textarea.form-control,
+    .form-control:is(textarea) {
+        min-height: 6rem;
+        padding-top: 0.75rem;
+        padding-bottom: 0.75rem;
+        line-height: 1.625;
+        resize: vertical;
+    }
+
+    input[type='number'].form-control,
+    .form-control:is(input[type='number']) {
+        font-family: var(--font-mono, monospace);
+    }
+
+    .form-control-invalid {
+        border-width: 1.5px !important;
+        border-color: var(--color-alert) !important;
+    }
+}
+
+/* ==========================================================================
+   Tabular numbers & animation utilities
+   ========================================================================== */
+.tabular-nums {
+    font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Chart animations & transitions
+   ========================================================================== */
+
+/* Hover / Focus: brightness increase without layout changes */
+.chart-bar-vertical,
+.chart-bar-horizontal,
+.chart-line-dot,
+.chart-donut-segment {
+    transition: filter 150ms ease;
+}
+
+.chart-bar-vertical:hover,
+.chart-bar-vertical:focus,
+.chart-bar-horizontal:hover,
+.chart-bar-horizontal:focus,
+.chart-line-dot:hover,
+.chart-line-dot:focus,
+.chart-donut-segment:hover,
+.chart-donut-segment:focus {
+    filter: brightness(1.08);
+    outline: none;
+}
+
+/* Reduced motion preference: smooth entrance only when motion is preferred */
+@media (prefers-reduced-motion: no-preference) {
+    @view-transition {
+        navigation: auto;
+    }
+
+    aside {
+        view-transition-name: app-sidebar;
+    }
+
+    header {
+        view-transition-name: app-header;
+    }
+
+    [data-tab-panel] {
+        view-transition-name: tab-panel;
+        animation: tabFadeIn 350ms cubic-bezier(.22, 1, .36, 1) both;
+    }
+
+    @keyframes tabFadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Initial state only when JS is enabled */
+    html.js .chart-animate:not(.is-visible) .chart-bar-vertical {
+        transform: scaleY(0);
+        transform-box: fill-box;
+        transform-origin: bottom;
+    }
+
+    html.js .chart-animate:not(.is-visible) .chart-bar-horizontal {
+        transform: scaleX(0);
+        transform-origin: left;
+    }
+
+    html.js .chart-animate:not(.is-visible) .chart-line-path {
+        stroke-dasharray: 1;
+        stroke-dashoffset: 1;
+    }
+
+    html.js .chart-animate:not(.is-visible) .chart-line-dot,
+    html.js .chart-animate:not(.is-visible) .chart-value-label,
+    html.js .chart-animate:not(.is-visible) .chart-donut-center,
+    html.js .chart-animate:not(.is-visible) .chart-legend {
+        opacity: 0;
+    }
+
+    html.js .chart-animate:not(.is-visible) .chart-donut-segment {
+        stroke-dashoffset: var(--initial-offset, 276.46);
+    }
+
+    /* Keyframes */
+    @keyframes chartScaleY {
+        from {
+            transform: scaleY(0);
+        }
+        to {
+            transform: scaleY(1);
+        }
+    }
+
+    @keyframes chartScaleX {
+        from {
+            transform: scaleX(0);
+        }
+        to {
+            transform: scaleX(1);
+        }
+    }
+
+    @keyframes chartLineDraw {
+        from {
+            stroke-dashoffset: 1;
+        }
+        to {
+            stroke-dashoffset: 0;
+        }
+    }
+
+    @keyframes chartDonutDraw {
+        from {
+            stroke-dashoffset: var(--initial-offset, 276.46);
+        }
+        to {
+            stroke-dashoffset: var(--final-offset, 0);
+        }
+    }
+
+    @keyframes chartFadeIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    /* Active animations when .is-visible */
+    html.js .chart-animate.is-visible .chart-bar-vertical {
+        transform-box: fill-box;
+        transform-origin: bottom;
+        animation: chartScaleY 700ms cubic-bezier(.22, 1, .36, 1) both;
+        animation-delay: min(calc(var(--i, 0) * 40ms), 400ms);
+    }
+
+    html.js .chart-animate.is-visible .chart-bar-horizontal {
+        transform-origin: left;
+        animation: chartScaleX 700ms cubic-bezier(.22, 1, .36, 1) both;
+        animation-delay: min(calc(var(--i, 0) * 40ms), 400ms);
+    }
+
+    html.js .chart-animate.is-visible .chart-line-path {
+        stroke-dasharray: 1;
+        animation: chartLineDraw 750ms cubic-bezier(.22, 1, .36, 1) both;
+        animation-delay: min(calc(var(--i, 0) * 40ms), 400ms);
+    }
+
+    html.js .chart-animate.is-visible .chart-line-dot {
+        animation: chartFadeIn 400ms cubic-bezier(.22, 1, .36, 1) both;
+        animation-delay: calc(min(calc(var(--i, 0) * 40ms), 400ms) + 400ms);
+    }
+
+    html.js .chart-animate.is-visible .chart-value-label {
+        animation: chartFadeIn 400ms cubic-bezier(.22, 1, .36, 1) both;
+        animation-delay: calc(min(calc(var(--i, 0) * 40ms), 400ms) + 350ms);
+    }
+
+    html.js .chart-animate.is-visible .chart-donut-segment {
+        animation: chartDonutDraw 750ms cubic-bezier(.22, 1, .36, 1) both;
+        animation-delay: min(calc(var(--i, 0) * 50ms), 400ms);
+    }
+
+    html.js .chart-animate.is-visible .chart-donut-center {
+        animation: chartFadeIn 500ms cubic-bezier(.22, 1, .36, 1) both;
+        animation-delay: 350ms;
+    }
+
+    html.js .chart-animate.is-visible .chart-legend {
+        animation: chartFadeIn 400ms cubic-bezier(.22, 1, .36, 1) both;
+        animation-delay: 400ms;
+    }
+}
+
+/* Disable completely in media print */
+@media print {
+    [data-tab-panel],
+    .chart-animate *,
+    .chart-animate {
+        animation: none !important;
+        transition: none !important;
+        transform: none !important;
+        opacity: 1 !important;
+        stroke-dasharray: none !important;
+        stroke-dashoffset: 0 !important;
+    }
+}
