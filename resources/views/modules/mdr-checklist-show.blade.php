@@ -5,10 +5,16 @@
 ])
 
 @section('header_action')
-    <a href="{{ route('mdr-checklist.index') }}"
-       class="inline-flex min-h-[44px] items-center justify-center rounded-full border border-line bg-white px-5 text-[13px] font-semibold text-ink transition hover:bg-paper-soft">
-        &larr; Kembali
-    </a>
+    <div class="flex items-center gap-3">
+        <a href="{{ route('mdr-checklist.export-show', ['mdr' => $mdr]) }}"
+           class="inline-flex min-h-[44px] items-center justify-center rounded-full border border-line bg-white px-5 text-[13px] font-semibold text-ink transition hover:bg-paper-soft">
+            Export Excel
+        </a>
+        <a href="{{ route('mdr-checklist.index') }}"
+           class="inline-flex min-h-[44px] items-center justify-center rounded-full border border-line bg-white px-5 text-[13px] font-semibold text-ink transition hover:bg-paper-soft">
+            &larr; Kembali
+        </a>
+    </div>
 @endsection
 
 @section('content')

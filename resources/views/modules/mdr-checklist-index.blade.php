@@ -1,9 +1,15 @@
 @extends('layouts.module', ['active' => 'mdr', 'pageTitle' => 'MDR Checklist'])
 
 @section('header_action')
-    <a href="{{ route('mdr-checklist.create') }}" class="hidden sm:inline-flex min-h-[48px] items-center justify-center rounded-[10px] bg-brand px-6 text-[14px] font-semibold text-white transition hover:bg-brand-dark">
-        + New MDR
-    </a>
+    <div class="flex items-center gap-3">
+        <a href="{{ route('mdr-checklist.export', array_filter(['status' => $validated['status'] ?? null, 'search' => $validated['search'] ?? null])) }}"
+           class="inline-flex min-h-[48px] items-center justify-center rounded-[10px] border border-line bg-white px-5 text-[14px] font-semibold text-ink transition hover:bg-paper">
+            Export Excel
+        </a>
+        <a href="{{ route('mdr-checklist.create') }}" class="hidden sm:inline-flex min-h-[48px] items-center justify-center rounded-[10px] bg-brand px-6 text-[14px] font-semibold text-white transition hover:bg-brand-dark">
+            + New MDR
+        </a>
+    </div>
 @endsection
 
 @section('content')

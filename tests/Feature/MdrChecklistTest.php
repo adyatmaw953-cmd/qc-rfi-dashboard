@@ -3,11 +3,14 @@
 namespace Tests\Feature;
 
 use App\Enums\MdrStatus;
+use App\Exports\MdrDetailExport;
+use App\Exports\MdrListExport;
 use App\Models\Mdr;
 use App\Models\MdrReportStatus;
 use App\Models\Project;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Maatwebsite\Excel\Facades\Excel;
 use Tests\TestCase;
 
 class MdrChecklistTest extends TestCase
@@ -584,6 +587,201 @@ class MdrChecklistTest extends TestCase
 
         $this->assertDatabaseMissing('mdrs', ['id' => $mdr->id]);
         $this->assertDatabaseCount('mdr_report_statuses', 0);
+    }
+
+    public function test_admin_and_qc_qa_can_export_mdr_list_and_detail(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $qc = User::factory()->create(['role' => 'qc_qa']);
+        $project = Project::factory()->create([
+            'project_code' => 'PRJ-EXP',
+            'project_name' => 'Export Project',
+            'customer' => 'Customer Indo',
+        ]);
+        $mdr = Mdr::factory()->for($project)->create(['unit_no' => 'Unit 101']);
+        $this->createDefaultStatuses($mdr);
+
+        $date = now()->format('Ymd');
+        $expectedListFile = "mdr-{$date}.xlsx";
+        $expectedDetailFile = "mdr-prj-exp-unit-101-{$date}.xlsx";
+
+        // Admin export list
+        Excel::fake();
+        $this->actingAs($admin)
+            ->get(route('mdr-checklist.export'))
+            ->assertOk();
+        Excel::assertDownloaded($expectedListFile, function (MdrListExport $export): bool {
+            return true;
+        });
+
+        // Admin export detail
+        Excel::fake();
+        $this->actingAs($admin)
+            ->get(route('mdr-checklist.export-show', ['mdr' => $mdr]))
+            ->assertOk();
+        Excel::assertDownloaded($expectedDetailFile, function (MdrDetailExport $export): bool {
+            return true;
+        });
+
+        // QC/QA export list
+        Excel::fake();
+        $this->actingAs($qc)
+            ->get(route('mdr-checklist.export'))
+            ->assertOk();
+        Excel::assertDownloaded($expectedListFile, function (MdrListExport $export): bool {
+            return true;
+        });
+
+        // QC/QA export detail
+        Excel::fake();
+        $this->actingAs($qc)
+            ->get(route('mdr-checklist.export-show', ['mdr' => $mdr]))
+            ->assertOk();
+        Excel::assertDownloaded($expectedDetailFile, function (MdrDetailExport $export): bool {
+            return true;
+        });
+    }
+
+    public function test_other_roles_cannot_export_mdr_list_or_detail(): void
+    {
+        $project = Project::factory()->create();
+        $mdr = Mdr::factory()->for($project)->create(['unit_no' => 'Unit X']);
+        $this->createDefaultStatuses($mdr);
+
+        $forbiddenRoles = ['production', 'warehouse', 'ppic'];
+
+        foreach ($forbiddenRoles as $role) {
+            $user = User::factory()->create(['role' => $role]);
+
+            $this->actingAs($user)
+                ->get(route('mdr-checklist.export'))
+                ->assertForbidden();
+
+            $this->actingAs($user)
+                ->get(route('mdr-checklist.export-show', ['mdr' => $mdr]))
+                ->assertForbidden();
+        }
+    }
+
+    public function test_mdr_list_export_respects_status_and_search_filters(): void
+    {
+        $qc = User::factory()->create(['role' => 'qc_qa']);
+        $projectA = Project::factory()->create([
+            'project_code' => 'PRJ-OPEN',
+            'project_name' => 'Open Project',
+        ]);
+        $projectB = Project::factory()->create([
+            'project_code' => 'PRJ-CLOSE',
+            'project_name' => 'Close Project',
+        ]);
+
+        $openMdr = Mdr::factory()->for($projectA)->create(['unit_no' => 'UNIT-OPEN-1']);
+        $this->createDefaultStatuses($openMdr, 'open');
+
+        $closeMdr = Mdr::factory()->for($projectB)->create(['unit_no' => 'UNIT-CLOSE-1']);
+        $this->createDefaultStatuses($closeMdr, 'close');
+
+        // Filter status=close
+        Excel::fake();
+        $this->actingAs($qc)
+            ->get(route('mdr-checklist.export', ['status' => 'close']))
+            ->assertOk();
+        Excel::assertDownloaded('mdr-'.now()->format('Ymd').'.xlsx', function (MdrListExport $export): bool {
+            $collection = $export->collection();
+            $this->assertCount(1, $collection);
+            $this->assertSame('PRJ-CLOSE', $collection->first()[1]);
+            $this->assertSame('16 dari 16', $collection->first()[7]);
+            $this->assertSame('Close', $collection->first()[8]);
+
+            return true;
+        });
+
+        // Filter status=open
+        Excel::fake();
+        $this->actingAs($qc)
+            ->get(route('mdr-checklist.export', ['status' => 'open']))
+            ->assertOk();
+        Excel::assertDownloaded('mdr-'.now()->format('Ymd').'.xlsx', function (MdrListExport $export): bool {
+            $collection = $export->collection();
+            $this->assertCount(1, $collection);
+            $this->assertSame('PRJ-OPEN', $collection->first()[1]);
+            $this->assertSame('0 dari 16', $collection->first()[7]);
+            $this->assertSame('Open', $collection->first()[8]);
+
+            return true;
+        });
+
+        // Filter search
+        Excel::fake();
+        $this->actingAs($qc)
+            ->get(route('mdr-checklist.export', ['search' => 'UNIT-CLOSE-1']))
+            ->assertOk();
+        Excel::assertDownloaded('mdr-'.now()->format('Ymd').'.xlsx', function (MdrListExport $export): bool {
+            $collection = $export->collection();
+            $this->assertCount(1, $collection);
+            $this->assertSame('UNIT-CLOSE-1', $collection->first()[4]);
+
+            return true;
+        });
+    }
+
+    public function test_mdr_detail_export_includes_custom_reports_and_has_no_side_effects(): void
+    {
+        $qc = User::factory()->create(['role' => 'qc_qa']);
+        $project = Project::factory()->create([
+            'project_code' => 'PRJ-CUSTOM',
+            'project_name' => 'Vessel Unit Alpha',
+            'customer' => 'Customer Pertamina',
+        ]);
+        $mdr = Mdr::factory()->for($project)->create([
+            'unit_no' => 'UNIT-CST-99',
+            'owner_serial_no' => 'OSN-999',
+            'manufacture_serial_no' => 'MFG-999',
+        ]);
+
+        // Do not create default 16 standard reports in database to test "baris belum ada = Open" and no side-effects
+        $mdr->reportStatuses()->create([
+            'report_key' => 'custom_1_additional_ndt',
+            'report_title' => 'Additional NDT Inspection',
+            'status' => MdrStatus::Close->value,
+        ]);
+
+        $this->assertDatabaseCount('mdr_report_statuses', 1);
+
+        Excel::fake();
+        $expectedFileName = 'mdr-prj-custom-unit-cst-99-'.now()->format('Ymd').'.xlsx';
+
+        $this->actingAs($qc)
+            ->get(route('mdr-checklist.export-show', ['mdr' => $mdr]))
+            ->assertOk();
+
+        // Verify no side-effects in database (firstOrCreate was NOT called)
+        $this->assertDatabaseCount('mdr_report_statuses', 1);
+
+        Excel::assertDownloaded($expectedFileName, function (MdrDetailExport $export): bool {
+            $data = $export->array();
+
+            // Info block (first 7 rows)
+            $this->assertSame(['Project Code - Name', 'PRJ-CUSTOM - Vessel Unit Alpha'], $data[0]);
+            $this->assertSame(['Customer', 'Customer Pertamina'], $data[1]);
+            $this->assertSame(['Unit No', 'UNIT-CST-99'], $data[2]);
+            $this->assertSame(['Owner Serial No', 'OSN-999'], $data[3]);
+            $this->assertSame(['Manufacture Serial No', 'MFG-999'], $data[4]);
+            $this->assertSame(['Status', 'Open'], $data[5]);
+            $this->assertSame(['Progres', '1 dari 17'], $data[6]);
+            $this->assertSame([], $data[7]);
+            $this->assertSame(['No', 'Report', 'Status'], $data[8]);
+
+            // Standard reports: 16 items (rows index 9 to 24)
+            for ($i = 9; $i <= 24; $i++) {
+                $this->assertSame('Open', $data[$i][2]);
+            }
+
+            // Custom report: 17th item (row index 25)
+            $this->assertSame([17, 'Additional NDT Inspection', 'Close'], $data[25]);
+
+            return true;
+        });
     }
 
     private function createDefaultStatuses(Mdr $mdr, string $status = 'open'): void

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Enums\MdrStatus;
+use App\Exports\MdrDetailExport;
+use App\Exports\MdrListExport;
 use App\Http\Requests\StoreMdrRequest;
 use App\Http\Requests\UpdateMdrRequest;
 use App\Models\Mdr;
@@ -15,6 +17,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class MdrChecklistController extends Controller
 {
@@ -88,50 +92,26 @@ class MdrChecklistController extends Controller
             ];
         }
 
-        $mdrs = Mdr::query()
-            ->with([
-                'project:id,project_code,project_name,customer',
-                'reportStatuses' => fn (HasMany $query): HasMany => $query
-                    ->whereIn('report_key', $reportKeys),
-            ])
-            ->withCount(['reportStatuses as completed_reports_count' => $completedReports])
-            ->when(
-                $search,
-                fn (Builder $query): Builder => $query->where(function (Builder $q) use ($search): void {
-                    $q->where('unit_no', 'like', "%{$search}%")
-                        ->orWhere('owner_serial_no', 'like', "%{$search}%")
-                        ->orWhere('manufacture_serial_no', 'like', "%{$search}%")
-                        ->orWhereHas('project', function (Builder $pq) use ($search): void {
-                            $pq->where('project_name', 'like', "%{$search}%")
-                                ->orWhere('project_code', 'like', "%{$search}%");
-                        });
-                })
-            )
-            ->when(
-                ($validated['status'] ?? null) === MdrStatus::Close->value,
-                fn (Builder $query): Builder => $query->whereHas(
-                    'reportStatuses',
-                    $completedReports,
-                    '=',
-                    $reportCount
-                )
-            )
-            ->when(
-                ($validated['status'] ?? null) === MdrStatus::Open->value,
-                fn (Builder $query): Builder => $query->whereHas(
-                    'reportStatuses',
-                    $completedReports,
-                    '<',
-                    $reportCount
-                )
-            )
-            ->orderByDesc('id')
+        $mdrs = $this->buildMdrQuery($validated['status'] ?? null, $search)
             ->paginate(15)
             ->withQueryString();
 
         $mdrChart = app(DashboardCharts::class)->mdrByMonth();
 
         return view('modules.mdr-checklist-index', compact('mdrs', 'validated', 'mdrChart', 'mdrTotals', 'statusCounts'));
+    }
+
+    public function export(Request $request): BinaryFileResponse
+    {
+        $validated = $request->validate([
+            'status' => ['nullable', 'in:open,close'],
+            'search' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $query = $this->buildMdrQuery($validated['status'] ?? null, $validated['search'] ?? null);
+        $fileName = 'mdr-'.now()->format('Ymd').'.xlsx';
+
+        return Excel::download(new MdrListExport($query), $fileName);
     }
 
     public function create(): View
@@ -327,5 +307,68 @@ class MdrChecklistController extends Controller
 
         return redirect()->route('mdr-checklist.index')
             ->with('success', "MDR untuk {$projectName} berhasil dihapus.");
+    }
+
+    public function exportShow(Mdr $mdr): BinaryFileResponse
+    {
+        $mdr->loadMissing([
+            'project:id,project_code,project_name,customer',
+            'reportStatuses',
+        ]);
+
+        $projectCodeSlug = Str::slug($mdr->project?->project_code ?? '') ?: 'project';
+        $unitSlug = Str::slug($mdr->unit_no ?: ($mdr->owner_serial_no ?: '')) ?: 'unit';
+        $fileName = "mdr-{$projectCodeSlug}-{$unitSlug}-".now()->format('Ymd').'.xlsx';
+
+        return Excel::download(new MdrDetailExport($mdr), $fileName);
+    }
+
+    private function buildMdrQuery(?string $status, ?string $search): Builder
+    {
+        $reportKeys = array_keys(config('mudalaya.mdr_reports', []));
+        $reportCount = count($reportKeys);
+        $completedStatuses = [MdrStatus::Close->value, MdrStatus::NotApplicable->value];
+        $completedReports = fn (Builder $query): Builder => $query
+            ->whereIn('report_key', $reportKeys)
+            ->whereIn('status', $completedStatuses);
+
+        return Mdr::query()
+            ->with([
+                'project:id,project_code,project_name,customer',
+                'reportStatuses' => fn (HasMany $query): HasMany => $query
+                    ->whereIn('report_key', $reportKeys),
+            ])
+            ->withCount(['reportStatuses as completed_reports_count' => $completedReports])
+            ->when(
+                $search,
+                fn (Builder $query): Builder => $query->where(function (Builder $q) use ($search): void {
+                    $q->where('unit_no', 'like', "%{$search}%")
+                        ->orWhere('owner_serial_no', 'like', "%{$search}%")
+                        ->orWhere('manufacture_serial_no', 'like', "%{$search}%")
+                        ->orWhereHas('project', function (Builder $pq) use ($search): void {
+                            $pq->where('project_name', 'like', "%{$search}%")
+                                ->orWhere('project_code', 'like', "%{$search}%");
+                        });
+                })
+            )
+            ->when(
+                $status === MdrStatus::Close->value,
+                fn (Builder $query): Builder => $query->whereHas(
+                    'reportStatuses',
+                    $completedReports,
+                    '=',
+                    $reportCount
+                )
+            )
+            ->when(
+                $status === MdrStatus::Open->value,
+                fn (Builder $query): Builder => $query->whereHas(
+                    'reportStatuses',
+                    $completedReports,
+                    '<',
+                    $reportCount
+                )
+            )
+            ->orderByDesc('id');
     }
 }

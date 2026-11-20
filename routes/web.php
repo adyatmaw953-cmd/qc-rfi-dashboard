@@ -132,9 +132,15 @@ Route::middleware(['auth', 'role:admin|production|qc_qa|warehouse|ppic'])->group
     Route::post('/mdr-checklist', [MdrChecklistController::class, 'store'])
         ->middleware('module:mdr')
         ->name('mdr-checklist.store');
+    Route::get('/mdr-checklist/export', [MdrChecklistController::class, 'export'])
+        ->middleware('module:mdr')
+        ->name('mdr-checklist.export');
     Route::get('/mdr-checklist/{mdr}', [MdrChecklistController::class, 'show'])
         ->middleware('module:mdr')
         ->name('mdr-checklist.show');
+    Route::get('/mdr-checklist/{mdr}/export', [MdrChecklistController::class, 'exportShow'])
+        ->middleware('module:mdr')
+        ->name('mdr-checklist.export-show');
     Route::put('/mdr-checklist/{mdr}', [MdrChecklistController::class, 'update'])
         ->middleware('module:mdr')
         ->name('mdr-checklist.update');
