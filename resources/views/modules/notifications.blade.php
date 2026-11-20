@@ -5,16 +5,16 @@
 @endsection
 
 @section('content')
-    <div class="mb-5 flex flex-wrap items-center justify-between gap-4">
+    <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         {{-- Filter Buttons --}}
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="no-scrollbar flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
             <a href="{{ route('notifications.index') }}"
-               class="inline-flex min-h-[44px] items-center gap-2 rounded-[10px] px-[18px] text-sm transition {{ $currentFilter !== 'unread' ? 'bg-ink font-semibold text-white' : 'border border-line bg-white font-medium text-ink hover:bg-paper/50' }}">
+               class="inline-flex shrink-0 min-h-[40px] sm:min-h-[44px] items-center gap-2 rounded-[10px] px-[18px] text-sm transition {{ $currentFilter !== 'unread' ? 'bg-ink font-semibold text-white' : 'border border-line bg-white font-medium text-ink hover:bg-paper/50' }}">
                 <span>Semua</span>
                 <span class="font-mono text-xs opacity-80">{{ $totalCount }}</span>
             </a>
             <a href="{{ route('notifications.index', ['filter' => 'unread']) }}"
-               class="inline-flex min-h-[44px] items-center gap-2 rounded-[10px] px-[18px] text-sm transition {{ $currentFilter === 'unread' ? 'bg-ink font-semibold text-white' : 'border border-line bg-white font-medium text-ink hover:bg-paper/50' }}">
+               class="inline-flex shrink-0 min-h-[40px] sm:min-h-[44px] items-center gap-2 rounded-[10px] px-[18px] text-sm transition {{ $currentFilter === 'unread' ? 'bg-ink font-semibold text-white' : 'border border-line bg-white font-medium text-ink hover:bg-paper/50' }}">
                 <span>Belum dibaca</span>
                 <span class="font-mono text-xs opacity-80">{{ $unreadCount }}</span>
             </a>

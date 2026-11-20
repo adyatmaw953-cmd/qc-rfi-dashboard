@@ -36,6 +36,16 @@
             ]
         )
     )->filter(fn (array $item): bool => in_array($role, $item['roles'], true));
+
+    if ($role === 'admin') {
+        $menuItems->push([
+            'key' => 'users',
+            'label' => 'Kelola Akun',
+            'route' => 'users.index',
+            'icon' => 'users',
+            'roles' => ['admin'],
+        ]);
+    }
 @endphp
 
 <aside id="main-sidebar" class="hidden md:flex w-[248px] shrink-0 flex-col bg-forest px-4 py-6 text-white transition-[width,padding] duration-200">
@@ -119,18 +129,32 @@
                 </div>
                 <div class="min-w-0 flex-1">
                     <p class="truncate text-[14px] font-medium text-white">{{ $user->name }}</p>
-                    <span class="mt-1 inline-flex rounded-full bg-forest-line px-2 py-0.5 text-[11px] font-semibold text-[#E8EFE6]">
+                    <span class="mt-1 inline-flex rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-[#26501F]">
                         {{ $roleLabel }}
                     </span>
                 </div>
             </div>
 
-            <form method="POST" action="{{ route('logout') }}" class="mt-3">
-                @csrf
-                <button type="submit" class="flex min-h-[38px] w-full items-center rounded-lg px-2 text-left text-[13px] text-forest-muted transition hover:bg-forest-hover hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">
-                    Logout
-                </button>
-            </form>
+            <div class="mt-3 flex flex-col gap-1">
+                <a href="{{ route('password.edit') }}" class="flex min-h-[36px] items-center gap-2 rounded-lg px-2 text-left text-[13px] text-forest-muted transition hover:bg-forest-hover hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">
+                    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    <span>Ganti Password</span>
+                </a>
+                <form method="POST" action="{{ route('logout') }}">
+                    @csrf
+                    <button type="submit" class="flex min-h-[36px] w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] text-forest-muted transition hover:bg-forest-hover hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">
+                        <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                        <span>Logout</span>
+                    </button>
+                </form>
+            </div>
         </div>
 
         {{-- Footer Tertutup (lebar 76px, rail ikon) --}}
@@ -144,22 +168,37 @@
                 </span>
             </div>
 
-            <form method="POST" action="{{ route('logout') }}" class="w-full flex justify-center">
-                @csrf
-                <button type="submit"
-                        class="group relative flex h-10 w-10 items-center justify-center rounded-lg text-forest-muted transition hover:bg-forest-hover hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
-                        aria-label="Logout"
-                        title="Logout">
+            <div class="flex flex-col items-center gap-2 w-full">
+                <a href="{{ route('password.edit') }}"
+                   class="group relative flex h-10 w-10 items-center justify-center rounded-lg text-forest-muted transition hover:bg-forest-hover hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+                   aria-label="Ganti Password"
+                   title="Ganti Password">
                     <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                        <polyline points="16 17 21 12 16 7"></polyline>
-                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                        <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                     </svg>
                     <span class="sidebar-tooltip">
-                        Logout
+                        Ganti Password
                     </span>
-                </button>
-            </form>
+                </a>
+
+                <form method="POST" action="{{ route('logout') }}" class="w-full flex justify-center">
+                    @csrf
+                    <button type="submit"
+                            class="group relative flex h-10 w-10 items-center justify-center rounded-lg text-forest-muted transition hover:bg-forest-hover hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+                            aria-label="Logout"
+                            title="Logout">
+                        <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                        <span class="sidebar-tooltip">
+                            Logout
+                        </span>
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 </aside>
@@ -306,35 +345,16 @@
     })();
 </script>
 
-<nav aria-label="Navigasi mobile" class="fixed inset-x-0 bottom-0 z-40 border-t border-forest-line bg-forest px-3 pb-[env(safe-area-inset-bottom)] pt-2 text-white md:hidden">
-    <div class="mb-2">
-        <x-brand-identity compact subtitle="{{ $roleLabel }}" />
-    </div>
-    <div class="flex gap-2 overflow-x-auto">
-        @foreach ($menuItems as $item)
-            <a href="{{ route($item['route']) }}"
-                @if ($active === $item['key']) aria-current="page" @endif
-                class="flex min-h-[44px] shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold {{ $active === $item['key'] ? 'bg-paper text-ink' : 'text-forest-text hover:bg-forest-hover' }}">
-                <x-module-menu-icon :name="$item['icon']" class="h-4 w-4" />
-                <span>{{ $item['label'] }}</span>
-            </a>
-        @endforeach
-    </div>
-    <div class="mt-2 flex items-center justify-between border-t border-forest-line py-2">
-        <div class="flex min-w-0 items-center gap-2">
-            <div aria-hidden="true" class="flex h-10 w-10 min-w-10 shrink-0 aspect-square items-center justify-center rounded-full bg-white text-xs font-bold leading-none whitespace-nowrap text-[#26501F]">
-                {{ $userInitials }}
-            </div>
-            <div class="min-w-0">
-                <p class="truncate text-xs font-semibold">{{ $user->name }}</p>
-                <span class="mt-0.5 inline-flex rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-[#26501F]">
-                    {{ $roleLabel }}
-                </span>
-            </div>
-        </div>
-        <form method="POST" action="{{ route('logout') }}">
-            @csrf
-            <button type="submit" class="flex min-h-[44px] items-center rounded-lg px-3 py-2 text-xs text-forest-muted transition hover:text-white">Logout</button>
-        </form>
-    </div>
+<nav aria-label="Navigasi mobile" class="fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-line bg-white px-2 pt-2 pb-[max(12px,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.04)] md:hidden">
+    @foreach ($menuItems as $item)
+        @php
+            $isItemActive = $active === $item['key'];
+        @endphp
+        <a href="{{ route($item['route']) }}"
+           @if ($isItemActive) aria-current="page" @endif
+           class="flex min-h-[56px] flex-1 min-w-0 flex-col items-center justify-center gap-1 rounded-[12px] px-1 text-[11px] transition {{ $isItemActive ? 'bg-[#E9EFE5] font-semibold text-ink' : 'font-medium text-[#5B665E] hover:bg-paper-soft hover:text-ink' }}">
+            <x-module-menu-icon :name="$item['icon']" class="h-[22px] w-[22px] shrink-0" />
+            <span class="max-w-[70px] truncate text-center leading-tight">{{ $item['label'] }}</span>
+        </a>
+    @endforeach
 </nav>

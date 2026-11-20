@@ -27,7 +27,9 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
+        $attemptCredentials = array_merge($credentials, ['is_active' => true]);
+
+        if (! Auth::attempt($attemptCredentials, $request->boolean('remember'))) {
             return back()
                 ->withErrors(['email' => 'Email atau kata sandi yang Anda masukkan salah.'])
                 ->onlyInput('email');

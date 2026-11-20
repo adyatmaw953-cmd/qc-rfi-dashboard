@@ -43,8 +43,8 @@
         </div>
     @else
         {{-- Filter & Search Bar --}}
-        <div class="mb-5 flex flex-wrap items-center justify-between gap-4">
-            <div class="flex flex-wrap items-center gap-1.5 rounded-[12px] bg-paper p-1">
+        <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <div class="no-scrollbar flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0 rounded-[12px] bg-paper p-1">
                 @php
                     $tabs = [
                         '' => ['label' => 'Semua', 'count' => $statusCounts['all']],
@@ -66,7 +66,7 @@
                         ]));
                     @endphp
                     <a href="{{ $url }}"
-                       class="inline-flex h-[44px] items-center gap-2 rounded-[10px] px-4 text-[14px] transition {{ $isActive ? 'bg-ink font-semibold text-white shadow-xs' : 'font-medium text-muted hover:bg-white/70 hover:text-ink' }}">
+                       class="inline-flex shrink-0 h-[40px] sm:h-[44px] items-center gap-2 rounded-[10px] px-4 text-[14px] transition {{ $isActive ? 'bg-ink font-semibold text-white shadow-xs' : 'font-medium text-muted hover:bg-white/70 hover:text-ink' }}">
                         <span>{{ $tab['label'] }}</span>
                         <span class="font-mono text-[12px] opacity-80">{{ $tab['count'] }}</span>
                     </a>

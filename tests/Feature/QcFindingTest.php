@@ -3,11 +3,13 @@
 namespace Tests\Feature;
 
 use App\Enums\RfiResult;
+use App\Models\FindingActivity;
 use App\Models\Project;
 use App\Models\QcFinding;
 use App\Models\Rfi;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
@@ -849,5 +851,429 @@ class QcFindingTest extends TestCase
             'status' => $status,
             'due_date' => $dueDate,
         ]);
+    }
+
+    public function test_qc_finding_project_displays_incoming_form_for_valid_rfi_baru(): void
+    {
+        $project = Project::factory()->create();
+        $qc = User::factory()->create(['role' => 'qc_qa']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $warehouse = User::factory()->create(['role' => 'warehouse']);
+
+        $rfi = Rfi::query()->create([
+            'project_id' => $project->id,
+            'category' => 'A',
+            'rfi_no' => 'RFI-A-9901',
+            'status' => 'open',
+            'date_inspect' => '2026-10-01',
+            'details' => ['material' => 'Baut M16', 'vendor' => 'V1'],
+            'created_by' => $warehouse->id,
+        ]);
+
+        // QC sees form
+        $resQc = $this->actingAs($qc)->get(route('qc-finding.project', [
+            'project' => $project->id,
+            'rfi_baru' => $rfi->id,
+        ]));
+        $resQc->assertOk()
+            ->assertSee('Tindakan QC — Incoming Material')
+            ->assertSee('RFI-A-9901')
+            ->assertSee(route('qc-finding.incoming.store', ['rfi' => $rfi->id]))
+            ->assertDontSee('Tindakan QC Incoming Material Tidak Dapat Ditampilkan');
+
+        // Admin also sees form
+        $resAdmin = $this->actingAs($admin)->get(route('qc-finding.project', [
+            'project' => $project->id,
+            'rfi_baru' => $rfi->id,
+        ]));
+        $resAdmin->assertOk()
+            ->assertSee('Tindakan QC — Incoming Material');
+
+        // No finding in DB yet
+        $this->assertDatabaseMissing('qc_findings', ['rfi_id' => $rfi->id]);
+    }
+
+    public function test_production_and_warehouse_cannot_access_or_submit_incoming_form(): void
+    {
+        $project = Project::factory()->create();
+        $production = User::factory()->create(['role' => 'production']);
+        $warehouse = User::factory()->create(['role' => 'warehouse']);
+
+        // We must have at least one finding in project so warehouse/production doesn't hit 404 for empty findings
+        $this->makeFinding('A', 'open', null, $project);
+
+        $rfi = Rfi::query()->create([
+            'project_id' => $project->id,
+            'category' => 'A',
+            'rfi_no' => 'RFI-A-9902',
+            'status' => 'open',
+            'date_inspect' => '2026-10-01',
+            'details' => ['material' => 'Baut M16'],
+            'created_by' => $warehouse->id,
+        ]);
+
+        // Warehouse gets error message and no form
+        $resWarehouse = $this->actingAs($warehouse)->get(route('qc-finding.project', [
+            'project' => $project->id,
+            'rfi_baru' => $rfi->id,
+        ]));
+        $resWarehouse->assertOk()
+            ->assertSee('Tindakan QC Incoming Material Tidak Dapat Ditampilkan')
+            ->assertDontSee(route('qc-finding.incoming.store', ['rfi' => $rfi->id]));
+
+        // Warehouse POST is forbidden
+        $this->actingAs($warehouse)->post(route('qc-finding.incoming.store', ['rfi' => $rfi->id]), [
+            'result' => 'use_as_is',
+            'material' => 'Baut M16',
+            'reason_of_finding' => 'Karat ringan',
+        ])->assertForbidden();
+
+        // Production POST is forbidden
+        $this->actingAs($production)->post(route('qc-finding.incoming.store', ['rfi' => $rfi->id]), [
+            'result' => 'use_as_is',
+            'material' => 'Baut M16',
+            'reason_of_finding' => 'Karat ringan',
+        ])->assertForbidden();
+    }
+
+    public function test_qc_finding_project_with_invalid_rfi_baru_shows_error_message(): void
+    {
+        $project = Project::factory()->create();
+        $otherProject = Project::factory()->create();
+        $qc = User::factory()->create(['role' => 'qc_qa']);
+
+        // Non-Category A RFI
+        $rfiB = Rfi::query()->create([
+            'project_id' => $project->id,
+            'category' => 'B',
+            'rfi_no' => 'RFI-B-9903',
+            'status' => 'open',
+            'date_inspect' => '2026-10-01',
+            'details' => ['line' => 'Line 1'],
+            'created_by' => $qc->id,
+        ]);
+
+        // Create 1 finding so project has findings
+        $this->makeFinding('A', 'open', null, $project);
+
+        $res = $this->actingAs($qc)->get(route('qc-finding.project', [
+            'project' => $project->id,
+            'rfi_baru' => $rfiB->id,
+        ]));
+        $res->assertOk()
+            ->assertSee('Tindakan QC Incoming Material Tidak Dapat Ditampilkan')
+            ->assertDontSee(route('qc-finding.incoming.store', ['rfi' => $rfiB->id]));
+
+        // RFI belonging to other project
+        $rfiOtherProj = Rfi::query()->create([
+            'project_id' => $otherProject->id,
+            'category' => 'A',
+            'rfi_no' => 'RFI-A-9904',
+            'status' => 'open',
+            'date_inspect' => '2026-10-01',
+            'details' => ['material' => 'Baut'],
+            'created_by' => $qc->id,
+        ]);
+
+        $res2 = $this->actingAs($qc)->get(route('qc-finding.project', [
+            'project' => $project->id,
+            'rfi_baru' => $rfiOtherProj->id,
+        ]));
+        $res2->assertOk()
+            ->assertSee('Tindakan QC Incoming Material Tidak Dapat Ditampilkan');
+    }
+
+    public function test_store_incoming_material_use_as_is_sends_single_notification_to_creator(): void
+    {
+        $project = Project::factory()->create();
+        $qc = User::factory()->create(['role' => 'qc_qa']);
+        $warehouse = User::factory()->create(['role' => 'warehouse']);
+
+        $rfi = Rfi::query()->create([
+            'project_id' => $project->id,
+            'category' => 'A',
+            'rfi_no' => 'RFI-A-9905',
+            'status' => 'open',
+            'date_inspect' => '2026-10-01',
+            'details' => ['material' => 'Pipa CS 4 inch'],
+            'created_by' => $warehouse->id,
+            'submitted_at' => Carbon::now('UTC')->subHour(),
+        ]);
+
+        $response = $this->actingAs($qc)->post(route('qc-finding.incoming.store', ['rfi' => $rfi->id]), [
+            'items' => [
+                [
+                    'materials' => ['Pipa CS 4 inch'],
+                    'reason' => 'Ada goresan halus di permukaan',
+                ],
+            ],
+            'result' => 'use_as_is',
+        ]);
+
+        $response->assertRedirect(route('qc-finding.project', ['project' => $project->id]));
+
+        $finding = QcFinding::query()->where('rfi_id', $rfi->id)->firstOrFail();
+        $this->assertSame('closed', $finding->status);
+        $this->assertSame(RfiResult::UseAsIs, $finding->result);
+        $this->assertSame('Ada goresan halus di permukaan', $finding->finding_list);
+        $this->assertSame('Pipa CS 4 inch', $finding->action_plan);
+        $this->assertNotNull($finding->date_of_close);
+
+        $rfi->refresh();
+        $this->assertSame('close', $rfi->status);
+        $this->assertSame(RfiResult::UseAsIs, $rfi->result);
+        $this->assertSame('Ada goresan halus di permukaan', $rfi->qc_note);
+
+        // Warehouse receives exactly one notification
+        $this->assertSame(1, $warehouse->notifications()->count());
+        $notification = $warehouse->notifications()->first();
+        $this->assertSame('finding.warehouse_use_as_is', $notification->data['type']);
+        $this->assertStringContainsString('Use as is', $notification->data['title']);
+
+        // Actor (QC) does not receive
+        $this->assertSame(0, $qc->notifications()->count());
+
+        // Assert activities recorded
+        $this->assertDatabaseHas('finding_activities', [
+            'qc_finding_id' => $finding->id,
+            'type' => FindingActivity::TYPE_RFI_SUBMITTED,
+        ]);
+        $this->assertDatabaseHas('finding_activities', [
+            'qc_finding_id' => $finding->id,
+            'type' => FindingActivity::TYPE_FINDING_CREATED,
+        ]);
+        $this->assertDatabaseHas('finding_activities', [
+            'qc_finding_id' => $finding->id,
+            'type' => FindingActivity::TYPE_ACTION_PLAN_SAVED,
+        ]);
+        $this->assertDatabaseHas('finding_histories', [
+            'qc_finding_id' => $finding->id,
+            'event' => 'closed_incoming',
+        ]);
+    }
+
+    public function test_store_incoming_material_reject_sends_notification_to_warehouse(): void
+    {
+        $project = Project::factory()->create();
+        $qc = User::factory()->create(['role' => 'qc_qa']);
+        $warehouse = User::factory()->create(['role' => 'warehouse']);
+
+        $rfi = Rfi::query()->create([
+            'project_id' => $project->id,
+            'category' => 'A',
+            'rfi_no' => 'RFI-A-9906',
+            'status' => 'open',
+            'date_inspect' => '2026-10-01',
+            'details' => ['material' => 'Flange 2 inch'],
+            'created_by' => $warehouse->id,
+            'submitted_at' => Carbon::now('UTC')->subHour(),
+        ]);
+
+        $response = $this->actingAs($qc)->post(route('qc-finding.incoming.store', ['rfi' => $rfi->id]), [
+            'material' => 'Flange 2 inch',
+            'reason_of_finding' => 'Dimensi tidak presisi',
+            'result' => 'reject',
+        ]);
+
+        $response->assertRedirect(route('qc-finding.project', ['project' => $project->id]));
+
+        $finding = QcFinding::query()->where('rfi_id', $rfi->id)->firstOrFail();
+        $this->assertSame('closed', $finding->status);
+        $this->assertSame(RfiResult::Reject, $finding->result);
+
+        $rfi->refresh();
+        $this->assertSame('nc', $rfi->status);
+        $this->assertSame(RfiResult::Reject, $rfi->result);
+
+        // Warehouse receives warehouseFindingRejected notification
+        $this->assertDatabaseHas('notifications', [
+            'notifiable_id' => $warehouse->id,
+        ]);
+    }
+
+    public function test_store_incoming_material_validation_failure_creates_no_data(): void
+    {
+        $project = Project::factory()->create();
+        $qc = User::factory()->create(['role' => 'qc_qa']);
+
+        $rfi = Rfi::query()->create([
+            'project_id' => $project->id,
+            'category' => 'A',
+            'rfi_no' => 'RFI-A-9907',
+            'status' => 'open',
+            'date_inspect' => '2026-10-01',
+            'details' => ['material' => 'Test Material'],
+            'created_by' => $qc->id,
+        ]);
+
+        $response = $this->actingAs($qc)->post(route('qc-finding.incoming.store', ['rfi' => $rfi->id]), [
+            'items' => [],
+            'material' => '',
+            'reason_of_finding' => '',
+            'result' => 'use_as_is',
+        ]);
+
+        $response->assertSessionHasErrors('material');
+        $this->assertDatabaseMissing('qc_findings', ['rfi_id' => $rfi->id]);
+        $this->assertSame('open', $rfi->fresh()->status);
+    }
+
+    public function test_store_incoming_material_second_submission_is_rejected(): void
+    {
+        $project = Project::factory()->create();
+        $qc = User::factory()->create(['role' => 'qc_qa']);
+        $warehouse = User::factory()->create(['role' => 'warehouse']);
+
+        $rfi = Rfi::query()->create([
+            'project_id' => $project->id,
+            'category' => 'A',
+            'rfi_no' => 'RFI-A-9908',
+            'status' => 'open',
+            'date_inspect' => '2026-10-01',
+            'details' => ['material' => 'Test Material'],
+            'created_by' => $warehouse->id,
+        ]);
+
+        $payload = [
+            'material' => 'Fitting Elbow',
+            'reason_of_finding' => 'Sudut tidak sesuai',
+            'result' => 'use_as_is',
+        ];
+
+        // First submit succeeds
+        $this->actingAs($qc)->post(route('qc-finding.incoming.store', ['rfi' => $rfi->id]), $payload)
+            ->assertRedirect();
+
+        $finding = QcFinding::query()->where('rfi_id', $rfi->id)->firstOrFail();
+        $this->assertSame('closed', $finding->status);
+        $this->assertSame(RfiResult::UseAsIs, $finding->result);
+        $notifCount = $warehouse->notifications()->count();
+        $this->assertSame(1, $notifCount);
+
+        // Second submit to store endpoint fails with 400
+        $this->actingAs($qc)->post(route('qc-finding.incoming.store', ['rfi' => $rfi->id]), [
+            'material' => 'Fitting Elbow Ganti',
+            'reason_of_finding' => 'Alasan berbeda',
+            'result' => 'reject',
+        ])->assertStatus(400);
+
+        // Submit to incoming-action on closed finding also fails with 400
+        $this->actingAs($qc)->post(route('qc-finding.incoming-action', ['finding' => $finding]), [
+            'material' => 'Fitting Elbow Ganti Lagi',
+            'reason_of_finding' => 'Alasan ketiga',
+            'result' => 'reject',
+        ])->assertStatus(400);
+
+        // Finding result and notification count are unchanged
+        $finding->refresh();
+        $rfi->refresh();
+        $this->assertSame('closed', $finding->status);
+        $this->assertSame(RfiResult::UseAsIs, $finding->result);
+        $this->assertSame('close', $rfi->status);
+        $this->assertSame(RfiResult::UseAsIs, $rfi->result);
+        $this->assertSame($notifCount, $warehouse->notifications()->count());
+    }
+
+    public function test_migration_cleanup_only_half_baked_incoming_material_findings(): void
+    {
+        $project = Project::factory()->create();
+        $qc = User::factory()->create(['role' => 'qc_qa']);
+
+        // 1. Half-baked finding
+        $rfiHalfBaked = Rfi::query()->create([
+            'project_id' => $project->id,
+            'category' => 'A',
+            'rfi_no' => 'RFI-A-CLEAN-1',
+            'status' => 'nc',
+            'result' => 'repair',
+            'reviewed_by' => $qc->id,
+            'reviewed_at' => Carbon::now('UTC'),
+            'date_inspect' => '2026-10-01',
+            'details' => ['material' => 'Test Half Baked'],
+            'created_by' => $qc->id,
+        ]);
+        $findingHalfBaked = QcFinding::query()->create([
+            'rfi_id' => $rfiHalfBaked->id,
+            'result' => RfiResult::Repair,
+            'finding_list' => 'Incoming Material Finding',
+            'date_of_finding' => '2026-10-01',
+            'status' => 'open',
+            'action_plan' => null,
+        ]);
+        DB::table('finding_activities')->insert([
+            'qc_finding_id' => $findingHalfBaked->id,
+            'type' => 'rfi_submitted',
+            'occurred_at' => Carbon::now('UTC'),
+            'created_at' => Carbon::now('UTC'),
+        ]);
+        DB::table('finding_activities')->insert([
+            'qc_finding_id' => $findingHalfBaked->id,
+            'type' => 'finding_created',
+            'occurred_at' => Carbon::now('UTC'),
+            'created_at' => Carbon::now('UTC'),
+        ]);
+
+        // 2. Legitimate closed finding (must NOT be touched)
+        $rfiClosed = Rfi::query()->create([
+            'project_id' => $project->id,
+            'category' => 'A',
+            'rfi_no' => 'RFI-A-KEEP-1',
+            'status' => 'close',
+            'result' => 'use_as_is',
+            'reviewed_by' => $qc->id,
+            'reviewed_at' => Carbon::now('UTC'),
+            'date_inspect' => '2026-10-01',
+            'details' => ['material' => 'Pipa Baja'],
+            'created_by' => $qc->id,
+        ]);
+        $findingClosed = QcFinding::query()->create([
+            'rfi_id' => $rfiClosed->id,
+            'result' => RfiResult::UseAsIs,
+            'finding_list' => 'Incoming Material Finding',
+            'action_plan' => 'Pipa Baja',
+            'date_of_finding' => '2026-10-01',
+            'status' => 'closed',
+        ]);
+
+        // 3. Finding with action plan (must NOT be touched)
+        $rfiWithPlan = Rfi::query()->create([
+            'project_id' => $project->id,
+            'category' => 'A',
+            'rfi_no' => 'RFI-A-KEEP-2',
+            'status' => 'nc',
+            'result' => 'repair',
+            'reviewed_by' => $qc->id,
+            'reviewed_at' => Carbon::now('UTC'),
+            'date_inspect' => '2026-10-01',
+            'details' => ['material' => 'Test With Plan'],
+            'created_by' => $qc->id,
+        ]);
+        $findingWithPlan = QcFinding::query()->create([
+            'rfi_id' => $rfiWithPlan->id,
+            'result' => RfiResult::Repair,
+            'finding_list' => 'Incoming Material Finding',
+            'action_plan' => 'Sedang dikoordinasikan dengan vendor',
+            'date_of_finding' => '2026-10-01',
+            'status' => 'open',
+        ]);
+
+        // Run the cleanup migration up()
+        $migration = require database_path('migrations/2026_11_16_000001_cleanup_half_baked_incoming_material_findings.php');
+        $migration->up();
+
+        // Half-baked finding is deleted and RFI reverted to open
+        $rfiHalfBaked->refresh();
+        $this->assertSame('open', $rfiHalfBaked->status);
+        $this->assertNull($rfiHalfBaked->result);
+        $this->assertNull($rfiHalfBaked->reviewed_by);
+        $this->assertNull($rfiHalfBaked->reviewed_at);
+        $this->assertDatabaseMissing('qc_findings', ['id' => $findingHalfBaked->id]);
+        $this->assertDatabaseMissing('finding_activities', ['qc_finding_id' => $findingHalfBaked->id]);
+
+        // Other findings are untouched
+        $this->assertDatabaseHas('qc_findings', ['id' => $findingClosed->id]);
+        $this->assertDatabaseHas('qc_findings', ['id' => $findingWithPlan->id]);
+        $this->assertSame('close', $rfiClosed->fresh()->status);
+        $this->assertSame('nc', $rfiWithPlan->fresh()->status);
     }
 }

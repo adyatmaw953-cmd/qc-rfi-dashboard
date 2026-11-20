@@ -89,6 +89,28 @@ class FindingSubmissionTest extends TestCase
         $this->assertDatabaseCount('finding_evidences', 2);
     }
 
+    public function test_submission_accepts_webp_files(): void
+    {
+        Storage::fake('local');
+        $finding = $this->makeFinding('B', actionPlan: 'Perbaiki dimensi flange');
+        $production = User::factory()->create(['role' => 'production']);
+
+        $response = $this->actingAs($production)
+            ->post(route('qc-finding.submissions.store', ['finding' => $finding]), [
+                'note' => 'Bukti foto webp.',
+                'evidence' => [
+                    UploadedFile::fake()->create('proof.webp', 200, 'image/webp'),
+                ],
+            ]);
+
+        $response->assertRedirect(route('qc-finding.project', ['project' => $finding->rfi->project_id]));
+        $this->assertDatabaseCount('finding_submissions', 1);
+        $this->assertDatabaseCount('finding_evidences', 1);
+
+        $evidence = $finding->submissions()->first()->evidences()->first();
+        $this->assertSame('proof.webp', $evidence->original_name);
+    }
+
     public function test_submission_rejects_unsupported_file_types(): void
     {
         $finding = $this->makeFinding('B', actionPlan: 'Perbaiki dimensi');
@@ -97,9 +119,11 @@ class FindingSubmissionTest extends TestCase
         $this->actingAs($production)
             ->post(route('qc-finding.submissions.store', ['finding' => $finding]), [
                 'note' => 'Bukti pekerjaan.',
-                'evidence' => [UploadedFile::fake()->create('script.txt', 10, 'text/plain')],
+                'evidence' => [UploadedFile::fake()->create('photo.heic', 10, 'image/heic')],
             ])
-            ->assertSessionHasErrors('evidence.0');
+            ->assertSessionHasErrors([
+                'evidence.0' => 'Format file tidak didukung. Gunakan format JPG, JPEG, PNG, WEBP, atau PDF.',
+            ]);
 
         $this->assertDatabaseCount('finding_submissions', 0);
     }
@@ -114,7 +138,9 @@ class FindingSubmissionTest extends TestCase
                 'note' => 'Hasil pengujian ulang.',
                 'evidence' => [UploadedFile::fake()->create('large.pdf', 10241, 'application/pdf')],
             ])
-            ->assertSessionHasErrors('evidence.0');
+            ->assertSessionHasErrors([
+                'evidence.0' => 'Ukuran file evidence maksimal 10 MB per file.',
+            ]);
 
         $this->assertDatabaseCount('finding_submissions', 0);
     }
@@ -134,9 +160,34 @@ class FindingSubmissionTest extends TestCase
                 'note' => 'Finishing sudah diperbaiki.',
                 'evidence' => $files,
             ])
-            ->assertSessionHasErrors('evidence');
+            ->assertSessionHasErrors([
+                'evidence' => 'Maksimal 5 file bukti yang dapat diunggah.',
+            ]);
 
         $this->assertDatabaseCount('finding_submissions', 0);
+    }
+
+    public function test_post_too_large_exception_redirects_back_with_evidence_message(): void
+    {
+        $finding = $this->makeFinding('B', actionPlan: 'Perbaiki pengelasan');
+        $production = User::factory()->create(['role' => 'production']);
+        $postUrl = route('qc-finding.submissions.store', ['finding' => $finding]);
+        $projectUrl = route('qc-finding.project', ['project' => $finding->rfi->project_id]);
+
+        $postMaxSize = ini_get('post_max_size') ?: '10M';
+
+        $response = $this->actingAs($production)
+            ->from($projectUrl)
+            ->call('POST', $postUrl, [], [], [], [
+                'CONTENT_LENGTH' => 1024 * 1024 * 1024,
+            ]);
+
+        $expectedMsg = "Total ukuran file melebihi batas server ({$postMaxSize}). Kurangi jumlah atau ukuran foto.";
+
+        $response->assertRedirect($projectUrl);
+        $response->assertSessionHasErrors([
+            'evidence' => $expectedMsg,
+        ]);
     }
 
     /**
@@ -388,6 +439,46 @@ class FindingSubmissionTest extends TestCase
         $fresh = $finding->fresh();
         $this->assertSame('open', $fresh->status);
         $this->assertSame('2026-11-11', $fresh->due_date->toDateString());
+
+        Carbon::setTestNow(null);
+    }
+
+    public function test_production_reinspect_resets_due_date_to_tomorrow_asia_jakarta_without_sending_due_date_notification(): void
+    {
+        Storage::fake('local');
+        Carbon::setTestNow(Carbon::parse('2026-11-10 14:00:00', 'Asia/Jakarta'));
+        $finding = $this->makeFinding('B', actionPlan: 'Perbaikan');
+        $finding->update(['due_date' => '2026-11-05']);
+        $production = User::factory()->create(['role' => 'production']);
+
+        $url = route('qc-finding.submissions.store', ['finding' => $finding]);
+
+        $this->actingAs($production)
+            ->post($url, [
+                'note' => 'Reinspect diajukan.',
+                'evidence' => [
+                    UploadedFile::fake()->create('proof.pdf', 100, 'application/pdf'),
+                ],
+            ])
+            ->assertRedirect();
+
+        $fresh = $finding->fresh();
+        $this->assertSame('waiting_verification', $fresh->status);
+        $this->assertSame('2026-11-11', $fresh->due_date->toDateString());
+
+        $this->assertDatabaseHas('finding_histories', [
+            'qc_finding_id' => $finding->id,
+            'event' => 'due_date_changed',
+            'new_value' => '2026-11-11',
+        ]);
+        $this->assertDatabaseHas('finding_activities', [
+            'qc_finding_id' => $finding->id,
+            'type' => 'due_date_changed',
+        ]);
+
+        $this->assertDatabaseMissing('notifications', [
+            'data->type' => 'finding.due_date_changed',
+        ]);
 
         Carbon::setTestNow(null);
     }

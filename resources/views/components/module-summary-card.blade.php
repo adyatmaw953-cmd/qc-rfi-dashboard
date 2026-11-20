@@ -1,4 +1,4 @@
-@props([
+    @props([
     'title' => '',
     'icon' => 'rfi',
     'detailUrl' => '#',
@@ -23,6 +23,8 @@
             @foreach ($stats as $stat)
                 @php
                     $val = $stat['value'] ?? 0;
+                    $rawLabel = (string) ($stat['label'] ?? '');
+                    $labelLower = strtolower(trim($rawLabel));
                     $countTo = $stat['count_to'] ?? null;
                     $prefix = $stat['prefix'] ?? '';
                     $suffix = $stat['suffix'] ?? '';
@@ -40,9 +42,58 @@
                             }
                         }
                     }
+
+                    $chip = $stat['chip'] ?? match (true) {
+                        str_contains($labelLower, 'open') || str_contains($labelLower, 'belum') => [
+                            'bg' => 'bg-[#E3EEFB]',
+                            'fg' => 'text-[#1B4C8C]',
+                            'dot' => 'bg-[#8DB6E8]',
+                        ],
+                        str_contains($labelLower, 'nc cost') || str_contains($labelLower, 'cost') => [
+                            'bg' => 'bg-[#E0E7FF]',
+                            'fg' => 'text-[#3730A3]',
+                            'dot' => 'bg-[#6366F1]',
+                        ],
+                        str_contains($labelLower, 'nc') => [
+                            'bg' => 'bg-[#FCE8D8]',
+                            'fg' => 'text-[#8F3F08]',
+                            'dot' => 'bg-[#E07B2E]',
+                        ],
+                        str_contains($labelLower, 'close') => [
+                            'bg' => 'bg-[#E1F0E2]',
+                            'fg' => 'text-[#1F5B2A]',
+                            'dot' => 'bg-[#1F5B2A]',
+                        ],
+                        str_contains($labelLower, 'terlambat') || str_contains($labelLower, 'overdue') => [
+                            'bg' => 'bg-[#FEE2E2]',
+                            'fg' => 'text-[#991B1B]',
+                            'dot' => 'bg-[#EF4444]',
+                        ],
+                        str_contains($labelLower, 'verifikasi') || str_contains($labelLower, 'waiting') => [
+                            'bg' => 'bg-[#FCE8D8]',
+                            'fg' => 'text-[#8F3F08]',
+                            'dot' => 'bg-[#E07B2E]',
+                        ],
+                        str_contains($labelLower, 'total') => [
+                            'bg' => 'bg-[#F4F2EB]',
+                            'fg' => 'text-[#5B665E]',
+                            'dot' => 'bg-[#8C978B]',
+                        ],
+                        default => [
+                            'bg' => 'bg-[#F4F2EB]',
+                            'fg' => 'text-[#5B665E]',
+                            'dot' => 'bg-[#8C978B]',
+                        ],
+                    };
                 @endphp
                 <div class="min-w-0 flex-1">
-                    <div class="font-mono text-[24px] font-semibold leading-[1.2] text-ink truncate tabular-nums"
+                    <div class="mb-1.5 flex items-center">
+                        <span class="inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[10px] sm:text-[11px] font-semibold {{ $chip['bg'] }} {{ $chip['fg'] }}" title="{{ $rawLabel }}">
+                            <span class="h-1.5 w-1.5 shrink-0 rounded-full {{ $chip['dot'] }}" aria-hidden="true"></span>
+                            <span class="truncate">{{ $rawLabel }}</span>
+                        </span>
+                    </div>
+                    <div class="font-mono text-[22px] sm:text-[24px] font-semibold leading-[1.2] text-ink truncate tabular-nums"
                          @if ($countTo !== null)
                              data-count-to="{{ $countTo }}"
                              @if ($decimals > 0) data-decimals="{{ $decimals }}" @endif
@@ -51,9 +102,6 @@
                          @endif
                     >
                         {{ $val }}
-                    </div>
-                    <div class="mt-0.5 text-[12px] font-normal leading-[1.35] text-muted">
-                        {{ $stat['label'] }}
                     </div>
                 </div>
             @endforeach

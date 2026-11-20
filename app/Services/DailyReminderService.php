@@ -25,7 +25,7 @@ class DailyReminderService
     public function sendDailyReminders(bool $dryRun = false, ?CarbonInterface $now = null): array
     {
         $now = $now ? Carbon::instance($now)->setTimezone(self::TZ) : Carbon::now(self::TZ);
-        $users = User::query()->orderBy('id')->get();
+        $users = User::query()->where('is_active', true)->orderBy('id')->get();
         $results = [];
 
         foreach ($users as $user) {
@@ -72,6 +72,10 @@ class DailyReminderService
      */
     public function buildReminderForUser(User $user, ?CarbonInterface $now = null): ?array
     {
+        if (! $user->is_active) {
+            return null;
+        }
+
         $now = $now ? Carbon::instance($now)->setTimezone(self::TZ) : Carbon::now(self::TZ);
 
         return match ($user->role) {
@@ -104,7 +108,7 @@ class DailyReminderService
      */
     private function buildProductionReminder(User $user, CarbonInterface $now): ?array
     {
-        $allowedCategories = config("mudalaya.findings.view_categories.{$user->role}", ['A', 'B', 'C', 'D', 'E']);
+        $allowedCategories = config("mudalaya.findings.view_categories.{$user->role}", ['A', 'B', 'C', 'D', 'E', 'F']);
         if (empty($allowedCategories)) {
             return null;
         }

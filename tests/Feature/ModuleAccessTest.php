@@ -57,18 +57,18 @@ class ModuleAccessTest extends TestCase
     public function test_rfi_categories_are_limited_to_authorized_roles_and_admin_sees_all(): void
     {
         $allowedCategories = [
-            'admin' => ['A', 'B', 'C', 'D', 'E'],
-            'qc_qa' => ['A', 'B', 'C', 'D', 'E'],
+            'admin' => ['A', 'B', 'C', 'D', 'E', 'F'],
+            'qc_qa' => ['A', 'B', 'C', 'D', 'E', 'F'],
             'production' => ['B', 'C', 'D'],
             'warehouse' => ['A'],
-            'ppic' => ['E'],
+            'ppic' => ['E', 'F'],
         ];
 
         foreach ($allowedCategories as $role => $categories) {
             $user = User::factory()->create(['role' => $role]);
             $response = $this->actingAs($user)->get(route('rfi.index'))->assertOk();
 
-            foreach (['A', 'B', 'C', 'D', 'E'] as $category) {
+            foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $category) {
                 $link = 'href="'.route('rfi.category', ['kategori' => $category]).'"';
 
                 if (in_array($category, $categories, true)) {

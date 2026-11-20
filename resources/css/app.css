@@ -276,6 +276,15 @@
     }
 }
 
+/* Hide scrollbar while keeping scroll functionality */
+.no-scrollbar {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+}
+.no-scrollbar::-webkit-scrollbar {
+    display: none; /* Chrome/Safari/WebKit */
+}
+
 /* Disable completely in media print */
 @media print {
     [data-tab-panel],

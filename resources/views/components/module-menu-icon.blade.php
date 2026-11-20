@@ -27,6 +27,12 @@
             <path d="M7 3.75h7l4.25 4.5v11A1.75 1.75 0 0 1 16.5 21h-9A1.75 1.75 0 0 1 5.75 19.25v-13.75A1.75 1.75 0 0 1 7.5 3.75Z" />
             <path d="M14 4v5h4.5M8.5 14l2 2 4.5-4.5" />
             @break
+        @case('users')
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            @break
         @case('reminder')
         @case('clock')
             <circle cx="12" cy="12" r="9" />

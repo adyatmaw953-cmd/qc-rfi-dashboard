@@ -3,7 +3,7 @@
 @section('header_action')
     @can('create', \App\Models\Ncr::class)
         <a href="{{ route('ncr.create') }}"
-           class="inline-flex min-h-[48px] items-center justify-center rounded-[10px] bg-brand px-5 py-2 text-[14px] font-semibold text-white transition hover:bg-brand-dark">
+           class="hidden sm:inline-flex min-h-[48px] items-center justify-center rounded-[10px] bg-brand px-5 py-2 text-[14px] font-semibold text-white transition hover:bg-brand-dark">
             + Buat NCR
         </a>
     @endcan
@@ -32,10 +32,37 @@
 @endphp
 
 {{-- Filter bar --}}
-<div class="mb-5 flex flex-wrap items-center gap-3">
+{{-- Mobile: Search (order-1), Status tabs (order-2), Filter toggle (order-3) --}}
+{{-- Desktop: Status tabs (left), Search + Filter toggle (right) --}}
+<div class="mb-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+
+    {{-- Search --}}
+    <div class="order-1 relative w-full sm:order-2 sm:ml-auto sm:max-w-[320px]">
+        <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-muted">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+            </svg>
+        </span>
+        <form method="GET" action="{{ route('ncr.index') }}" id="ncr-search-form">
+            @foreach ($filters as $fk => $fv)
+                @if ($fk !== 'search' && $fk !== 'page' && $fv !== null && $fv !== '')
+                    <input type="hidden" name="{{ $fk }}" value="{{ $fv }}">
+                @endif
+            @endforeach
+            <input type="search"
+                   name="search"
+                   id="search"
+                   value="{{ $filters['search'] ?? '' }}"
+                   aria-label="Pencarian"
+                   placeholder="Cari no NCR, uraian masalah, PIC..."
+                   class="w-full min-h-[48px] sm:min-h-[44px] rounded-[10px] border border-line bg-white py-2 pr-4 text-[14px] sm:text-[13px] text-ink placeholder:text-muted focus:border-brand focus:outline-none"
+                   style="padding-left:42px"
+                   form="ncr-search-form">
+        </form>
+    </div>
 
     {{-- Segmented status tabs --}}
-    <div class="inline-flex overflow-hidden rounded-[10px] border border-line bg-white" role="group" aria-label="Filter status">
+    <nav class="no-scrollbar order-2 flex w-full gap-2 overflow-x-auto pb-1 sm:order-1 sm:w-auto sm:overflow-visible sm:pb-0" role="group" aria-label="Filter status">
         @foreach ($tabs as $tab)
             @php
                 $isActive = ($filters['status'] ?? '') === $tab['key'];
@@ -46,59 +73,31 @@
                 ));
             @endphp
             <a href="{{ $tabUrl }}"
-               class="inline-flex min-h-[44px] items-center gap-2 px-4 text-[13px] font-semibold transition border-r border-line last:border-r-0
-                      {{ $isActive ? 'bg-ink text-white' : 'text-muted hover:text-ink hover:bg-paper-soft' }}"
+               class="inline-flex shrink-0 min-h-[44px] items-center gap-2 rounded-[10px] border px-4 text-[14px] transition
+                      {{ $isActive ? 'border-ink bg-ink font-semibold text-white' : 'border-line bg-white font-medium text-ink hover:bg-paper-soft' }}"
                aria-current="{{ $isActive ? 'page' : 'false' }}">
                 <span>{{ $tab['label'] }}</span>
-                <span class="font-mono text-[12px] {{ $isActive ? 'text-white/70' : 'text-muted' }}">{{ $count }}</span>
+                <span class="font-mono text-[12px] {{ $isActive ? 'text-white/80' : 'text-muted' }}">{{ $count }}</span>
             </a>
         @endforeach
-    </div>
+    </nav>
 
-    {{-- Spacer --}}
-    <div class="flex flex-1 items-center justify-end gap-2 flex-wrap">
-
-        {{-- Search --}}
-        <div class="relative" style="max-width:320px; width:100%">
-            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted">
-                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
-                </svg>
+    {{-- Filter lainnya toggle --}}
+    <button id="ncr-filter-toggle"
+            type="button"
+            aria-controls="ncr-filter-panel"
+            aria-expanded="{{ $advancedCount > 0 ? 'true' : 'false' }}"
+            class="order-3 inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-[#8C978B] bg-white px-4 text-[14px] font-semibold text-ink transition hover:bg-paper-soft sm:order-3 sm:min-h-[44px] sm:w-auto sm:rounded-full sm:border-line sm:text-[13px]">
+        <svg class="h-4 w-4 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+        </svg>
+        Filter lainnya
+        @if ($advancedCount > 0)
+            <span class="inline-flex h-[20px] min-w-[20px] items-center justify-center rounded-full bg-[#E9EFE5] px-2 font-mono text-[11px] font-semibold text-[#1F5B2A]">
+                {{ $advancedCount }}
             </span>
-            <form method="GET" action="{{ route('ncr.index') }}" id="ncr-search-form">
-                @foreach ($filters as $fk => $fv)
-                    @if ($fk !== 'search' && $fk !== 'page' && $fv !== null && $fv !== '')
-                        <input type="hidden" name="{{ $fk }}" value="{{ $fv }}">
-                    @endif
-                @endforeach
-                <input type="search"
-                       name="search"
-                       value="{{ $filters['search'] ?? '' }}"
-                       aria-label="Pencarian"
-                       placeholder="Cari no NCR, uraian masalah, PIC..."
-                       class="w-full min-h-[44px] rounded-[10px] border border-line bg-white py-2 pr-4 text-[13px] text-ink placeholder:text-muted focus:border-brand focus:outline-none"
-                       style="padding-left:42px"
-                       form="ncr-search-form">
-            </form>
-        </div>
-
-        {{-- Filter lainnya toggle --}}
-        <button id="ncr-filter-toggle"
-                type="button"
-                aria-controls="ncr-filter-panel"
-                aria-expanded="{{ $advancedCount > 0 ? 'true' : 'false' }}"
-                class="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-line bg-white px-4 text-[13px] font-semibold text-ink transition hover:bg-paper-soft">
-            <svg class="h-4 w-4 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
-            </svg>
-            Filter lainnya
-            @if ($advancedCount > 0)
-                <span class="inline-flex h-[20px] min-w-[20px] items-center justify-center rounded-full bg-brand-pale px-1.5 font-mono text-[11px] font-semibold text-[#1F5B2A]">
-                    {{ $advancedCount }}
-                </span>
-            @endif
-        </button>
-    </div>
+        @endif
+    </button>
 </div>
 
 {{-- Advanced filter panel --}}
@@ -235,7 +234,90 @@
     </div>
 </div>
 
-{{-- Data table card --}}
+{{-- Mobile card list (hidden on sm+) --}}
+<section class="mb-4 flex flex-col gap-3 sm:hidden" aria-label="Daftar NCR">
+    @forelse ($ncrs as $ncr)
+        <article class="flex flex-col gap-2.5 rounded-2xl border border-line bg-white p-4">
+            {{-- Header: No NCR + Status chip --}}
+            <div class="flex items-center justify-between gap-2">
+                <a href="{{ route('ncr.show', $ncr) }}" class="font-mono text-[14px] font-semibold text-brand underline">
+                    {{ $ncr->ncr_number }}
+                </a>
+                <x-status-chip :status="$ncr->status" />
+            </div>
+
+            {{-- Date · Department --}}
+            <div class="text-[13px] text-muted">
+                {{ $ncr->finding_date?->translatedFormat('d M Y') ?? '—' }} · {{ $ncr->department }}
+            </div>
+
+            {{-- Project / Internal --}}
+            @if ($ncr->project_code && $ncr->project)
+                <div>
+                    <span class="font-mono text-[13px] font-semibold text-brand">{{ $ncr->project_code }}</span>
+                    <div class="text-[12px] text-muted">{{ $ncr->project->project_name }}</div>
+                </div>
+            @else
+                <div><span class="text-[13px] text-muted">— (Internal)</span></div>
+            @endif
+
+            {{-- Level chip + Type --}}
+            <div class="flex items-center gap-2 flex-wrap">
+                <x-level-chip :level="$ncr->level" />
+                <span class="text-[13px] text-muted">{{ $ncr->type }}</span>
+            </div>
+
+            {{-- Time Leads + NC Cost --}}
+            <div class="flex items-center justify-between gap-3 border-t border-line pt-2.5">
+                <span class="text-[13px] text-muted">Time Leads <b class="font-mono font-semibold text-ink">{{ $ncr->time_leads !== null ? $ncr->time_leads . ' hari' : '-' }}</b></span>
+                <b class="font-mono text-[14px] font-semibold text-ink">Rp {{ number_format($ncr->nc_cost ?? 0, 0, ',', '.') }}</b>
+            </div>
+
+            {{-- Action buttons --}}
+            <div class="flex gap-2 pt-0.5">
+                <a href="{{ route('ncr.show', $ncr) }}"
+                   class="flex-1 min-h-[48px] rounded-[10px] border border-[#8C978B] bg-white text-[13px] font-semibold text-ink flex items-center justify-center transition hover:bg-paper-soft">
+                    Detail
+                </a>
+                @can('update', $ncr)
+                    <a href="{{ route('ncr.edit', $ncr) }}"
+                       class="flex-1 min-h-[48px] rounded-[10px] border border-[#8C978B] bg-white text-[13px] font-semibold text-ink flex items-center justify-center transition hover:bg-paper-soft">
+                        Edit
+                    </a>
+                @endcan
+                @can('delete', $ncr)
+                    <form method="POST" action="{{ route('ncr.destroy', $ncr) }}"
+                          onsubmit="return confirm('Yakin ingin menghapus NCR {{ $ncr->ncr_number }}?');"
+                          class="inline">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit"
+                                class="min-h-[48px] px-4 rounded-[10px] border border-line bg-white text-[13px] font-semibold text-[#8F3F08] flex items-center justify-center transition hover:bg-paper-soft">
+                            Hapus
+                        </button>
+                    </form>
+                @endcan
+            </div>
+        </article>
+    @empty
+        <div class="rounded-2xl border border-dashed border-line p-8 text-center text-[13px] text-muted">
+            @if ($hasAnyFilter)
+                <p class="font-semibold text-ink">Tidak ada NCR yang cocok</p>
+                <p class="mt-1 text-muted">Coba ubah filter atau pencarian Anda.</p>
+                <a href="{{ route('ncr.index') }}" class="mt-2 inline-flex font-semibold text-brand hover:underline">Reset filter</a>
+            @else
+                <p class="font-semibold text-ink">Belum ada NCR</p>
+                <p class="mt-1 text-muted">Belum ada data NCR yang sesuai dengan filter.</p>
+            @endif
+        </div>
+    @endforelse
+
+    {{-- Pagination on mobile --}}
+    <div class="mt-2">{{ $ncrs->links('vendor.pagination.mudalaya', ['totalLabel' => 'NCR']) }}</div>
+</section>
+
+{{-- Desktop table (hidden on mobile) --}}
+<div class="hidden sm:block">
 <div class="overflow-hidden rounded-2xl border border-line bg-white">
     <div class="overflow-x-auto">
         <table class="w-full min-w-[960px] text-left text-[13px]">
@@ -359,33 +441,17 @@
     {{-- Footer / pagination --}}
     {{ $ncrs->links('vendor.pagination.mudalaya', ['totalLabel' => 'NCR']) }}
 </div>
+{{-- End desktop table --}}
+</div>
 
-{{-- Responsive: stack cards on small screens --}}
-<style>
-    @media (max-width: 820px) {
-        table.min-w-\[960px\] thead { display: none; }
-        table.min-w-\[960px\] tbody tr {
-            display: block;
-            border-bottom: 1px solid var(--color-line);
-            padding: 12px 20px;
-        }
-        table.min-w-\[960px\] tbody td {
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            padding: 6px 0;
-        }
-        table.min-w-\[960px\] tbody td::before {
-            content: attr(data-l);
-            min-width: 100px;
-            font-size: 12px;
-            color: var(--color-muted);
-            font-weight: 600;
-            padding-top: 2px;
-            flex-shrink: 0;
-        }
-        #ncr-filter-panel .grid { grid-template-columns: 1fr; }
-    }
-</style>
+{{-- FAB: + Buat NCR, mobile only, fixed bottom-right above bottom nav --}}
+@can('create', \App\Models\Ncr::class)
+    <a href="{{ route('ncr.create') }}"
+       class="sm:hidden fixed bottom-[88px] right-5 z-40 inline-flex min-h-[52px] items-center gap-2 rounded-[26px] bg-brand px-6 text-[14px] font-semibold text-white shadow-[0_6px_16px_rgba(20,32,26,0.25)] transition hover:bg-brand-dark active:scale-95"
+       aria-label="Buat NCR baru">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        Buat NCR
+    </a>
+@endcan
 
 @endsection

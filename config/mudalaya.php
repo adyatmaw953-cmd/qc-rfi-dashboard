@@ -71,6 +71,7 @@ return [
             'C' => ['production'],
             'D' => ['production'],
             'E' => ['ppic'],
+            'F' => ['ppic'],
         ],
 
         // Roles that may send a Re-Inspect submission with evidence per RFI category (admin is always allowed)
@@ -79,15 +80,16 @@ return [
             'C' => ['production'],
             'D' => ['production'],
             'E' => ['ppic'],
+            'F' => ['ppic'],
         ],
 
         // Which finding categories each role may view (list, project detail, charts, download)
         'view_categories' => [
-            'admin' => ['A', 'B', 'C', 'D', 'E'],
-            'qc_qa' => ['A', 'B', 'C', 'D', 'E'],
+            'admin' => ['A', 'B', 'C', 'D', 'E', 'F'],
+            'qc_qa' => ['A', 'B', 'C', 'D', 'E', 'F'],
             'production' => ['A', 'B', 'C', 'D', 'E'],
             'warehouse' => ['A'],
-            'ppic' => ['E'],
+            'ppic' => ['E', 'F'],
         ],
     ],
 
@@ -146,6 +148,44 @@ return [
                 ['name' => 'drawing_no', 'label' => 'Drawing No', 'type' => 'text', 'required' => true],
                 ['name' => 'process', 'label' => 'Proses', 'type' => 'text', 'required' => true],
                 ['name' => 'scheduled_at', 'label' => 'Jadwal inspeksi', 'type' => 'date', 'required' => true],
+            ],
+            'fields' => [],
+        ],
+        'F' => [
+            'label' => 'Inspection by Customer',
+            'roles' => ['admin', 'qc_qa', 'ppic'],
+            'submit_roles' => ['ppic'],
+            'general_fields' => [
+                [
+                    'name' => 'jenis_inspeksi',
+                    'label' => 'Jenis inspeksi',
+                    'type' => 'radio',
+                    'required' => true,
+                    'options' => [
+                        'Material inspection',
+                        'Fit up inspection',
+                        'Welding inspection',
+                        'Load test',
+                        'NDE test',
+                        'Painting inspection',
+                        'Final inspection',
+                        'Additional',
+                    ],
+                ],
+                [
+                    'name' => 'additional_name',
+                    'label' => 'Nama inspeksi tambahan',
+                    'type' => 'text',
+                    'required' => false,
+                    'required_if' => [
+                        'field' => 'jenis_inspeksi',
+                        'value' => 'Additional',
+                    ],
+                    'show_if' => [
+                        'field' => 'jenis_inspeksi',
+                        'value' => 'Additional',
+                    ],
+                ],
             ],
             'fields' => [],
         ],

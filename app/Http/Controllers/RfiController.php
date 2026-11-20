@@ -7,7 +7,6 @@ use App\Http\Requests\ReviewRfiRequest;
 use App\Http\Requests\StoreRfiRequest;
 use App\Models\FindingActivity;
 use App\Models\Project;
-use App\Models\QcFinding;
 use App\Models\Rfi;
 use App\Models\User;
 use App\Services\FindingActivityRecorder;
@@ -175,7 +174,7 @@ class RfiController extends Controller
             'categoryCode' => $kategori,
             'category' => $category,
             'commonFields' => config('mudalaya.rfi_common_fields'),
-            'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_code', 'project_name']),
+            'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_code', 'project_name', 'customer']),
         ]);
     }
 
@@ -281,7 +280,7 @@ class RfiController extends Controller
             'categoryCode' => $kategori,
             'category' => $category,
             'commonFields' => config('mudalaya.rfi_common_fields'),
-            'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_code', 'project_name']),
+            'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_code', 'project_name', 'customer']),
             'rfi' => $rfi,
         ]);
     }
@@ -318,53 +317,10 @@ class RfiController extends Controller
         abort_unless($rfi->category === $kategori, 404);
         abort_unless($rfi->status === 'open', 400);
 
-        $qcFinding = DB::transaction(function () use ($request, $rfi): QcFinding {
-            $lockedRfi = Rfi::query()->whereKey($rfi->id)->lockForUpdate()->firstOrFail();
-            $lockedRfi->status = 'nc';
-            $lockedRfi->result = RfiResult::Repair;
-            $lockedRfi->reviewed_by = $request->user()->id;
-            $lockedRfi->reviewed_at = Carbon::now('UTC');
-            $lockedRfi->save();
-
-            $qcFinding = QcFinding::query()->firstOrCreate(
-                ['rfi_id' => $lockedRfi->id],
-                [
-                    'result' => RfiResult::Repair,
-                    'finding_list' => 'Incoming Material Finding',
-                    'date_of_finding' => Carbon::now('Asia/Jakarta')->toDateString(),
-                    'due_date' => Carbon::now('Asia/Jakarta')->addDay()->toDateString(),
-                    'status' => 'open',
-                ]
-            );
-
-            if ($qcFinding->wasRecentlyCreated) {
-                $rfiSubmitter = $lockedRfi->created_by ? User::find($lockedRfi->created_by) : null;
-                FindingActivityRecorder::record(
-                    finding: $qcFinding,
-                    type: FindingActivity::TYPE_RFI_SUBMITTED,
-                    actor: $rfiSubmitter,
-                    meta: ['rfi_no' => $lockedRfi->rfi_no],
-                    at: $lockedRfi->submitted_at ? Carbon::instance($lockedRfi->submitted_at) : Carbon::now('UTC'),
-                );
-                FindingActivityRecorder::record(
-                    finding: $qcFinding,
-                    type: FindingActivity::TYPE_FINDING_CREATED,
-                    actor: $request->user(),
-                    meta: array_filter([
-                        'disposition' => RfiResult::Repair->value,
-                        'rfi_no' => $lockedRfi->rfi_no,
-                    ]),
-                    at: Carbon::instance($qcFinding->created_at ?? Carbon::now('UTC')),
-                );
-            }
-
-            return $qcFinding;
-        });
-
         return redirect()->route('qc-finding.project', [
             'project' => $rfi->project_id,
-            'buka' => $qcFinding->id,
-        ])->with('success', 'RFI dialihkan ke QC Finding. Silakan tentukan tindakan QC untuk Incoming Material.');
+            'rfi_baru' => $rfi->id,
+        ])->with('success', 'Silakan tentukan tindakan QC untuk Incoming Material.');
     }
 
     public function update(
@@ -463,6 +419,10 @@ class RfiController extends Controller
         $validated = $request->validated();
         $result = RfiResult::from($validated['result']);
         $qcFinding = null;
+
+        if ($kategori === 'A' && $result !== RfiResult::Accepted) {
+            abort(422, 'RFI kategori A hanya menerima hasil Accepted pada review. Hasil lain hanya boleh melalui jalur Finding.');
+        }
 
         DB::transaction(function () use ($request, $kategori, $rfi, $result, $validated, &$qcFinding): void {
             $lockedRfi = Rfi::query()

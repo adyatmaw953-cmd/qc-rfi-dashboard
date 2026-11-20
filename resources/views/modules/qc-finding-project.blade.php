@@ -37,16 +37,31 @@
                     <x-due-chip :due-date="$nearestDueDate" :all-closed="$allClosed" />
                 </div>
             </div>
+            <div class="mb-3 flex flex-wrap items-center gap-1.5">
+                <span class="inline-flex items-center gap-1 rounded-full bg-[#E3EEFB] px-2.5 py-0.5 text-[11px] font-semibold text-[#1B4C8C]">
+                    <span class="h-1.5 w-1.5 rounded-full bg-[#8DB6E8]" aria-hidden="true"></span>
+                    <span class="font-mono">{{ $projectOpenCount }}</span> Open
+                </span>
+                <span class="inline-flex items-center gap-1 rounded-full bg-[#FCE8D8] px-2.5 py-0.5 text-[11px] font-semibold text-[#8F3F08]">
+                    <span class="h-1.5 w-1.5 rounded-full bg-[#E07B2E]" aria-hidden="true"></span>
+                    <span class="font-mono">{{ $projectWaitingCount }}</span> Menunggu Verifikasi
+                </span>
+                <span class="inline-flex items-center gap-1 rounded-full bg-[#E1F0E2] px-2.5 py-0.5 text-[11px] font-semibold text-[#1F5B2A]">
+                    <span class="h-1.5 w-1.5 rounded-full bg-[#1F5B2A]" aria-hidden="true"></span>
+                    <span class="font-mono">{{ $projectClosedCount }}</span> Closed
+                </span>
+            </div>
             <x-progress-stack
                 :open="$projectOpenCount"
                 :waiting="$projectWaitingCount"
                 :closed="$projectClosedCount"
+                :show-legend="false"
             />
         </div>
 
         {{-- Filter Segmented Tabs & Filter Proses --}}
-        <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <div class="no-scrollbar flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
                 @php
                     $statusTabs = [
                         'semua' => ['label' => 'Semua', 'count' => $statusCounts['semua']],
@@ -63,7 +78,7 @@
                         }
                     @endphp
                     <a href="{{ route('qc-finding.project', $tabParams) }}"
-                       class="inline-flex min-h-[44px] items-center gap-1.5 rounded-[10px] px-4 text-[13px] transition {{ $selectedStatus === $key ? 'bg-ink font-semibold text-white' : 'border border-line bg-white font-medium text-ink hover:bg-paper-soft' }}">
+                       class="inline-flex shrink-0 min-h-[36px] sm:min-h-[44px] items-center gap-1.5 rounded-[10px] px-4 text-[13px] transition {{ $selectedStatus === $key ? 'bg-ink font-semibold text-white' : 'border border-line bg-white font-medium text-ink hover:bg-paper-soft' }}">
                         <span>{{ $tab['label'] }}</span>
                         <span class="font-mono text-[12px] opacity-80">{{ $tab['count'] }}</span>
                     </a>
@@ -96,6 +111,200 @@
         <div class="grid grid-cols-1 min-[1100px]:grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
             {{-- Kolom Kiri: Daftar Kartu Temuan --}}
             <div class="space-y-5 min-w-0">
+                @if (! empty($rfiBaruError))
+                    <div class="rounded-2xl border border-red-200 bg-red-50 p-5 text-[13px] text-alert">
+                        <div class="flex items-center gap-2 font-semibold">
+                            <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>Tindakan QC Incoming Material Tidak Dapat Ditampilkan</span>
+                        </div>
+                        <p class="mt-1 text-[13px] text-ink">{{ $rfiBaruError }}</p>
+                    </div>
+                @endif
+
+                @if ($rfiBaru)
+                    @php
+                        $rfiBaruDetails = is_array($rfiBaru->details) ? $rfiBaru->details : (json_decode($rfiBaru->details ?? '', true) ?: []);
+                        $incomingFindingsBaru = old('items');
+                        if (! is_array($incomingFindingsBaru) || empty($incomingFindingsBaru)) {
+                            $initialMats = [];
+                            $rawMats = $rfiBaruDetails['material'] ?? null;
+                            if (is_array($rawMats)) {
+                                $initialMats = $rawMats;
+                            } elseif (filled($rawMats)) {
+                                $initialMats = array_values(array_filter(array_map('trim', explode(',', (string) $rawMats))));
+                            }
+                            $incomingFindingsBaru = [
+                                [
+                                    'materials' => $initialMats,
+                                    'reason' => '',
+                                ],
+                            ];
+                        } else {
+                            $rebuilt = [];
+                            foreach ($incomingFindingsBaru as $oldItem) {
+                                $mats = is_array($oldItem['materials'] ?? null)
+                                    ? array_values(array_filter(array_map('trim', $oldItem['materials'])))
+                                    : (filled($oldItem['materials'] ?? null) ? [trim($oldItem['materials'])] : []);
+                                $rebuilt[] = [
+                                    'materials' => $mats,
+                                    'reason' => (string) ($oldItem['reason'] ?? ''),
+                                ];
+                            }
+                            $incomingFindingsBaru = ! empty($rebuilt) ? $rebuilt : [['materials' => [], 'reason' => '']];
+                        }
+                    @endphp
+
+                    <div class="rounded-2xl border-2 border-brand/30 bg-white p-[22px] sm:p-[26px] shadow-sm">
+                        <div class="mb-4">
+                            <div class="flex items-center justify-between gap-3">
+                                <span class="inline-flex items-center gap-1.5 rounded-full bg-brand-pale px-3 py-1 font-mono text-[13px] font-semibold text-brand">
+                                    {{ $rfiBaru->rfi_no }}
+                                </span>
+                                <span class="inline-flex items-center rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[12px] font-semibold text-amber-800">
+                                    Form Baru
+                                </span>
+                            </div>
+                            <h4 class="mt-2 text-[17px] font-bold text-ink">Tindakan QC — Incoming Material</h4>
+                            <p class="text-[13px] text-muted">Lengkapi data temuan QC untuk material dari Warehouse ini sebelum temuan dicatat.</p>
+                        </div>
+
+                        <form method="POST" action="{{ route('qc-finding.incoming.store', ['rfi' => $rfiBaru]) }}" id="incoming-form-rfi-{{ $rfiBaru->id }}" class="space-y-4">
+                            @csrf
+
+                            @if ($errors->has('material') || $errors->has('reason_of_finding'))
+                                <div class="rounded-lg bg-red-50 border border-red-200 p-3 text-[13px] text-alert">
+                                    {{ $errors->first('material') ?: $errors->first('reason_of_finding') }}
+                                </div>
+                            @endif
+
+                            <div class="overflow-x-auto rounded-[14px] border border-line bg-white shadow-xs">
+                                <table class="w-full text-left text-[13px] text-ink" id="incoming-table-rfi-{{ $rfiBaru->id }}">
+                                    <thead class="border-b border-line bg-paper-soft text-[12px] font-semibold text-ink">
+                                        <tr>
+                                            <th class="w-[50px] px-4 py-3 text-center">NO.</th>
+                                            <th class="w-[45%] px-4 py-3">Material <span class="text-alert">*</span></th>
+                                            <th class="px-4 py-3">Reason of Finding <span class="text-alert">*</span></th>
+                                            <th class="w-[60px] px-4 py-3 text-center">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-line" id="incoming-tbody-rfi-{{ $rfiBaru->id }}">
+                                        @foreach ($incomingFindingsBaru as $fIndex => $fRow)
+                                            <tr data-row-index="{{ $fIndex }}">
+                                                <td class="px-4 py-3 text-center font-medium text-ink align-top pt-4">
+                                                    <span class="row-no">{{ $fIndex + 1 }}</span>
+                                                </td>
+                                                <td class="px-4 py-3 align-top">
+                                                    <div class="space-y-2">
+                                                        <div class="flex gap-1.5">
+                                                            <input
+                                                                type="text"
+                                                                placeholder="Ketik nama material..."
+                                                                class="material-row-input form-control text-[13px] h-[38px] flex-1 min-w-[150px]"
+                                                            >
+                                                            <button
+                                                                type="button"
+                                                                class="btn-add-tag inline-flex h-[38px] shrink-0 items-center justify-center rounded-[8px] bg-brand px-3 text-[12px] font-semibold text-white transition hover:bg-brand-dark"
+                                                            >
+                                                                + Tambah
+                                                            </button>
+                                                        </div>
+                                                        <div class="material-tags-container flex flex-wrap gap-1.5 min-h-[46px] p-2 rounded-[10px] border border-[#B9B5A6] bg-paper-soft/40 items-center">
+                                                            @foreach ($fRow['materials'] ?? [] as $mItem)
+                                                                @if (trim($mItem) !== '')
+                                                                    <span class="inline-flex items-center gap-1.5 rounded-full bg-[#E9EFE5] border border-brand/40 px-3 py-1 text-[12px] font-semibold text-[#1F5B2A]">
+                                                                        <span>{{ $mItem }}</span>
+                                                                        <input type="hidden" name="items[{{ $fIndex }}][materials][]" value="{{ $mItem }}">
+                                                                        <button type="button" class="btn-remove-tag text-[#1F5B2A] hover:text-alert font-bold ml-1 focus:outline-none" title="Hapus">&times;</button>
+                                                                    </span>
+                                                                @endif
+                                                            @endforeach
+                                                            <span class="tag-empty-hint text-[11px] text-muted italic {{ !empty($fRow['materials']) ? 'hidden' : '' }}">Belum ada material</span>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td class="px-4 py-3 align-top">
+                                                    <textarea
+                                                        name="items[{{ $fIndex }}][reason]"
+                                                        rows="3"
+                                                        placeholder="[isian teks]"
+                                                        class="form-control text-[13px] resize-y min-h-[92px]"
+                                                        required
+                                                    >{{ $fRow['reason'] ?? '' }}</textarea>
+                                                </td>
+                                                <td class="px-4 py-3 text-center align-top pt-4">
+                                                    <button
+                                                        type="button"
+                                                        class="btn-delete-row inline-flex h-[36px] w-[36px] items-center justify-center rounded-[8px] bg-[#FEE2E2] text-[#EF4444] transition hover:bg-[#FCA5A5] focus:outline-none"
+                                                        title="Hapus baris"
+                                                    >
+                                                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                                                        </svg>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="pt-1">
+                                <button
+                                    type="button"
+                                    id="btn-add-material-row-rfi-{{ $rfiBaru->id }}"
+                                    class="inline-flex min-h-[42px] items-center justify-center rounded-[10px] bg-brand px-5 text-[13px] font-semibold text-white shadow-xs transition hover:bg-brand-dark"
+                                >
+                                    + Tambah Material
+                                </button>
+                                <p class="mt-1.5 text-[12px] text-muted">Ketik nama material lalu klik + Tambah. Bisa lebih dari satu.</p>
+                            </div>
+
+                            <div class="mt-5 border-t border-line/60 pt-4">
+                                <span class="mb-2 block text-[13px] font-semibold text-ink">
+                                    Result <span class="text-alert">*</span>
+                                </span>
+                                <div class="flex flex-wrap items-center gap-6">
+                                    <label class="inline-flex items-center gap-2 cursor-pointer text-[13px] text-ink font-medium">
+                                        <input
+                                            type="radio"
+                                            name="result"
+                                            value="use_as_is"
+                                            class="h-4 w-4 text-brand focus:ring-brand border-line"
+                                            @checked(old('result') === 'use_as_is')
+                                            required
+                                        >
+                                        <span>1. Use as is</span>
+                                    </label>
+                                    <label class="inline-flex items-center gap-2 cursor-pointer text-[13px] text-ink font-medium">
+                                        <input
+                                            type="radio"
+                                            name="result"
+                                            value="reject"
+                                            class="h-4 w-4 text-brand focus:ring-brand border-line"
+                                            @checked(old('result') === 'reject')
+                                            required
+                                        >
+                                        <span>2. Reject</span>
+                                    </label>
+                                </div>
+                                <p class="mt-1.5 text-[11px] text-muted">Jika memilih Reject, notifikasi otomatis akan dikirim ke pihak Warehouse.</p>
+                            </div>
+
+                            <div class="flex justify-end pt-2">
+                                <button
+                                    type="submit"
+                                    class="inline-flex min-h-[44px] items-center justify-center rounded-[10px] bg-brand px-7 text-[13px] font-semibold text-white shadow-xs transition hover:bg-brand-dark"
+                                >
+                                    Simpan
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                @endif
+
                 @forelse ($findings as $finding)
                 @php
                     $latestSubmission = $finding->submissions->last();
@@ -117,12 +326,18 @@
 
                             @if ($finding->can_link_rfi)
                                 <a href="{{ route('rfi.category', ['kategori' => $finding->rfi->category, 'status' => 'nc']) }}"
-                                   class="font-mono text-[14px] font-semibold text-brand underline hover:text-brand-dark">
+                                   class="inline-flex items-center rounded-full bg-[#E9EFE5] px-2.5 py-0.5 font-mono text-[12px] font-semibold text-[#1F5B2A] transition hover:bg-[#d8e6d2]">
                                     {{ $finding->rfi->rfi_no }}
                                 </a>
                             @else
-                                <span class="font-mono text-[14px] font-semibold text-brand">
+                                <span class="inline-flex items-center rounded-full bg-[#E9EFE5] px-2.5 py-0.5 font-mono text-[12px] font-semibold text-[#1F5B2A]">
                                     {{ $finding->rfi->rfi_no }}
+                                </span>
+                            @endif
+
+                            @if ($finding->rfi?->category)
+                                <span class="inline-flex items-center rounded-full bg-paper border border-line px-2.5 py-0.5 text-[11px] font-semibold text-muted">
+                                    Kategori {{ $finding->rfi->category }}
                                 </span>
                             @endif
 
@@ -233,6 +448,13 @@
                                 }
                             } elseif ($rfiCat === 'E') {
                                 $detailText = $rfiDetails['vendor'] ?? '';
+                            } elseif ($rfiCat === 'F') {
+                                $jenis = $rfiDetails['jenis_inspeksi'] ?? '';
+                                if ($jenis === 'Additional') {
+                                    $detailText = $rfiDetails['additional_name'] ?? 'Additional';
+                                } else {
+                                    $detailText = $jenis;
+                                }
                             }
                             $prosesLabel = $catLabel . ($detailText !== '' ? ' · ' . $detailText : '');
                         @endphp
@@ -299,7 +521,105 @@
                             <x-finding-stepper :stages="$stepper['stages']" />
                         </div>
 
-                                @if ($finding->rfi?->category === 'A')
+                        {{-- Mobile tab bar: Detail | Riwayat (hidden on min-[1100px]) --}}
+                        @php
+                            $findingActCount = $finding->activities->count();
+                        @endphp
+                        <div class="my-4 min-[1100px]:hidden" data-finding-mobile-tabs="{{ $finding->id }}">
+                            {{-- Tab switcher --}}
+                            <div class="no-scrollbar -mx-[18px] sm:-mx-[22px] flex gap-2 overflow-x-auto px-[18px] sm:px-[22px] pb-3" role="tablist" aria-label="Isi temuan">
+                                <button type="button"
+                                        role="tab"
+                                        onclick="switchFindingTab('{{ $finding->id }}', 'detail')"
+                                        data-target-tab="detail"
+                                        aria-selected="true"
+                                        class="tab-btn-detail inline-flex flex-1 items-center justify-center min-h-[44px] rounded-[10px] border border-ink bg-ink px-4 text-[14px] font-semibold text-white transition shrink-0">
+                                    Detail
+                                </button>
+                                <button type="button"
+                                        role="tab"
+                                        onclick="switchFindingTab('{{ $finding->id }}', 'riwayat')"
+                                        data-target-tab="riwayat"
+                                        aria-selected="false"
+                                        class="tab-btn-riwayat inline-flex flex-1 items-center justify-center gap-2 min-h-[44px] rounded-[10px] border border-line bg-white px-4 text-[14px] font-medium text-ink transition hover:bg-paper-soft shrink-0">
+                                    <span>History Finding</span>
+                                    <span class="font-mono text-[12px] opacity-80">{{ $findingActCount }}</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {{-- Mobile Riwayat Timeline Panel: only on mobile (<1100px) when riwayat tab is active --}}
+                        <div id="panel-riwayat-{{ $finding->id }}" class="hidden min-[1100px]:hidden -mx-[18px] sm:-mx-[22px] -mb-[18px] sm:-mb-[22px] border-t border-line overflow-hidden rounded-b-2xl">
+                            @if ($finding->activities->isNotEmpty())
+                                <ol aria-label="History Finding temuan" class="divide-y divide-[#E1DED3]/40">
+                                    @foreach ($finding->activities as $mobAct)
+                                        @php
+                                            $mobPres = \App\Services\FindingActivityPresenter::present($mobAct);
+                                            $mobIsLast = $loop->last;
+                                            $mobTone = match ($mobPres['tone']) {
+                                                'info'    => 'bg-[#E3EEFB] text-[#1B4C8C]',
+                                                'warn'    => 'bg-[#FCE8D8] text-[#8F3F08]',
+                                                'ok'      => 'bg-[#E1F0E2] text-[#1F5B2A]',
+                                                'neutral' => 'bg-[#EEEBE1] text-[#3F4A41]',
+                                                default   => 'bg-[#EEEBE1] text-[#3F4A41]',
+                                            };
+                                        @endphp
+                                        <li class="relative flex items-start gap-3 px-4 py-3.5 text-[14px] leading-[1.5] {{ $loop->first ? 'bg-[#FBFAF6]' : '' }}">
+                                            @if (! $mobIsLast)
+                                                <span class="absolute left-[29px] top-[44px] bottom-[-14px] w-[2px] bg-[#E1DED3] z-0" aria-hidden="true"></span>
+                                            @endif
+                                            <div class="relative z-[1] flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full {{ $mobTone }}" aria-hidden="true">
+                                                @if ($mobPres['icon'] === 'arrow-up')
+                                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                                                @elseif ($mobPres['icon'] === 'calendar')
+                                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                                @elseif ($mobPres['icon'] === 'x-circle')
+                                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                                @elseif ($mobPres['icon'] === 'check')
+                                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                                @elseif ($mobPres['icon'] === 'pencil')
+                                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                                                @elseif ($mobPres['icon'] === 'flag')
+                                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/></svg>
+                                                @elseif ($mobPres['icon'] === 'document')
+                                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                                @else
+                                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>
+                                                @endif
+                                            </div>
+                                            <div class="min-w-0 flex-1 pt-0.5">
+                                                <p class="text-[14px] leading-[1.5] text-ink">
+                                                    <b class="font-semibold">{{ $mobPres['actor'] }}</b>
+                                                    <span>{{ $mobPres['verb'] }}</span>
+                                                    @if ($mobPres['object'] !== '')
+                                                        <b class="font-semibold">{{ $mobPres['object'] }}</b>
+                                                    @endif
+                                                </p>
+                                                <div class="mt-1 flex flex-wrap items-center gap-2">
+                                                    <time datetime="{{ $mobAct->occurred_at?->toIso8601String() }}" class="font-mono text-[12px] text-[#5B665E]">
+                                                        {{ $mobPres['time_absolute'] }}
+                                                    </time>
+                                                    <span class="text-[12px] text-muted">· {{ $mobPres['time_relative'] }}</span>
+                                                    @if ($loop->first)
+                                                        <span class="inline-flex items-center rounded-full bg-[#14201A] px-2.5 py-0.5 text-[11px] font-semibold text-white">Terbaru</span>
+                                                    @endif
+                                                </div>
+                                                @if (filled($mobPres['note']))
+                                                    <div class="mt-1.5 rounded-[10px] border border-[#E1DED3] bg-[#FBFAF6] px-3 py-2 text-[13px] text-[#3F4A41] leading-relaxed whitespace-pre-line break-words">
+                                                        {!! nl2br(e($mobPres['note'])) !!}
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        </li>
+                                    @endforeach
+                                </ol>
+                            @else
+                                <div class="p-6 text-center text-[13px] text-muted">Belum ada aktivitas untuk temuan ini.</div>
+                            @endif
+                        </div>
+
+                        {{-- Detail Panel: visible on desktop, and on mobile toggled via tab --}}
+                        <div id="panel-detail-{{ $finding->id }}" class="min-[1100px]:!block">                                @if ($finding->rfi?->category === 'A')
                                     <div class="space-y-4">
                                 @php
                                     $isQcOrAdmin = in_array(auth()->user()->role, ['admin', 'qc_qa'], true);
@@ -593,13 +913,40 @@
                             {{-- 2. Bagian Kirim Re-Inspect (Pemenuhan) --}}
                             @if ($finding->status === 'open' && $finding->can_submit)
                                 @if (filled($finding->action_plan))
-                                    <div class="rounded-xl border border-line bg-white p-5 shadow-sm space-y-4">
-                                        <div>
+                                    @php
+                                        $hasSubmissionErrors = $errors->hasAny(['evidence', 'evidence.*', 'note']);
+                                    @endphp
+                                    <details id="reinspect-form-{{ $finding->id }}"
+                                             class="reinspect-form-details rounded-xl border border-line bg-white p-5 shadow-sm space-y-4"
+                                             open>
+                                        <summary class="cursor-pointer select-none">
                                             <h4 class="text-[15px] font-semibold text-ink">Kirim Pemenuhan (Re-Inspect)</h4>
                                             <p class="text-[12px] text-muted">Kirimkan catatan perbaikan dan bukti foto/dokumen untuk diverifikasi oleh tim QC.</p>
-                                        </div>
+                                        </summary>
 
-                                        <form method="POST" enctype="multipart/form-data" action="{{ route('qc-finding.submissions.store', ['finding' => $finding]) }}" class="space-y-4">
+                                        @if ($hasSubmissionErrors)
+                                            <div class="reinspect-error-summary rounded-xl border border-[#F0C7A8] bg-[#FCE8D8] p-4 text-[13px] text-[#8F3F08]">
+                                                <div class="flex items-center gap-2 font-semibold">
+                                                    <svg class="h-4 w-4 shrink-0 text-[#8F3F08]" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                                    </svg>
+                                                    <span>Gagal mengirim Re-Inspect. Periksa kembali isian berikut:</span>
+                                                </div>
+                                                <ul class="mt-2 list-inside list-disc space-y-1 text-[12px]">
+                                                    @foreach ($errors->get('note') as $err)
+                                                        <li>{{ $err }}</li>
+                                                    @endforeach
+                                                    @foreach ($errors->get('evidence') as $err)
+                                                        <li>{{ $err }}</li>
+                                                    @endforeach
+                                                    @foreach ($errors->get('evidence.*') as $err)
+                                                        <li>{{ $err }}</li>
+                                                    @endforeach
+                                                </ul>
+                                            </div>
+                                        @endif
+
+                                        <form method="POST" enctype="multipart/form-data" action="{{ route('qc-finding.submissions.store', ['finding' => $finding]) }}" class="space-y-4 pt-2">
                                             @csrf
                                             <label class="block text-[13px] font-semibold text-ink">
                                                 Catatan pemenuhan
@@ -614,7 +961,7 @@
 
                                             <div class="space-y-1.5">
                                                 <span class="block text-[13px] font-semibold text-ink">
-                                                    Evidence (1–5 file, JPG/PNG/PDF, maksimal 10 MB per file)
+                                                    Evidence (1–5 file, JPG/PNG/WEBP/PDF, maksimal 10 MB per file)
                                                 </span>
                                                 <x-evidence-dropzone :finding-id="$finding->id" />
                                             </div>
@@ -623,7 +970,7 @@
                                                 Kirim Re-Inspect
                                             </button>
                                         </form>
-                                    </div>
+                                    </details>
                                 @else
                                     <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-[13px] font-medium text-amber-800">
                                         Isi action plan sebelum mengirim Re-Inspect.
@@ -782,6 +1129,8 @@
                             @endif
                         </div>
                         @endif
+                        {{-- Close mobile detail panel --}}
+                        </div>{{-- /#panel-detail --}}
                     @endif
                 </article>
             @empty
@@ -791,13 +1140,12 @@
             @endforelse
         </div>
 
-        {{-- Kolom Kanan: Panel Riwayat Aktivitas (Sticky di Desktop) --}}
-        <aside aria-label="Riwayat aktivitas" class="w-full min-[1100px]:w-[360px] min-[1100px]:shrink-0 min-[1100px]:sticky min-[1100px]:top-4 rounded-2xl border border-line bg-white p-0 overflow-hidden shadow-xs">
+        {{-- Kolom Kanan: Panel History Finding (Sticky di Desktop) --}}
+        <aside aria-label="History Finding" class="hidden min-[1100px]:block w-full min-[1100px]:w-[360px] min-[1100px]:shrink-0 min-[1100px]:sticky min-[1100px]:top-4 rounded-2xl border border-line bg-white p-0 overflow-hidden shadow-xs">
             <header class="border-b border-[#E1DED3] px-[22px] pt-[20px] pb-[14px]">
                 <div class="flex items-center justify-between gap-2">
                     <h2 class="text-[18px] font-semibold text-ink">
-                        Riwayat aktivitas
-                        <span class="sr-only">History Finding</span>
+                        History Finding
                     </h2>
                     <span class="rounded-full bg-[#E9EFE5] px-2.5 py-0.5 font-mono text-[12px] font-semibold text-[#1F5B2A]">
                         {{ $activitiesTotalCount ?? $activities->count() }}
@@ -816,7 +1164,7 @@
                     $remainingActivities = $activities->slice(20);
                 @endphp
 
-                <ol aria-label="Riwayat aktivitas temuan" class="divide-y divide-[#E1DED3]/40">
+                <ol aria-label="History Finding temuan" class="divide-y divide-[#E1DED3]/40">
                     @foreach ($topActivities as $act)
                         @php
                             $pres = \App\Services\FindingActivityPresenter::present($act);
@@ -1035,6 +1383,42 @@
 
     {{-- Script untuk validasi tombol Not OK dan multi-material table --}}
     <script>
+        function switchFindingTab(findingId, tab) {
+            const tabsWrapper = document.querySelector(`[data-finding-mobile-tabs="${findingId}"]`);
+            const detailPanel = document.getElementById(`panel-detail-${findingId}`);
+            const riwayatPanel = document.getElementById(`panel-riwayat-${findingId}`);
+            if (!tabsWrapper || !detailPanel || !riwayatPanel) return;
+
+            const btnDetail = tabsWrapper.querySelector('[data-target-tab="detail"]');
+            const btnRiwayat = tabsWrapper.querySelector('[data-target-tab="riwayat"]');
+
+            if (tab === 'riwayat') {
+                detailPanel.classList.add('hidden');
+                riwayatPanel.classList.remove('hidden');
+
+                if (btnDetail) {
+                    btnDetail.className = 'tab-btn-detail inline-flex flex-1 items-center justify-center min-h-[44px] rounded-[10px] border border-line bg-white px-4 text-[14px] font-medium text-ink transition hover:bg-paper-soft shrink-0';
+                    btnDetail.setAttribute('aria-selected', 'false');
+                }
+                if (btnRiwayat) {
+                    btnRiwayat.className = 'tab-btn-riwayat inline-flex flex-1 items-center justify-center gap-2 min-h-[44px] rounded-[10px] border border-ink bg-ink px-4 text-[14px] font-semibold text-white transition shrink-0';
+                    btnRiwayat.setAttribute('aria-selected', 'true');
+                }
+            } else {
+                detailPanel.classList.remove('hidden');
+                riwayatPanel.classList.add('hidden');
+
+                if (btnDetail) {
+                    btnDetail.className = 'tab-btn-detail inline-flex flex-1 items-center justify-center min-h-[44px] rounded-[10px] border border-ink bg-ink px-4 text-[14px] font-semibold text-white transition shrink-0';
+                    btnDetail.setAttribute('aria-selected', 'true');
+                }
+                if (btnRiwayat) {
+                    btnRiwayat.className = 'tab-btn-riwayat inline-flex flex-1 items-center justify-center gap-2 min-h-[44px] rounded-[10px] border border-line bg-white px-4 text-[14px] font-medium text-ink transition hover:bg-paper-soft shrink-0';
+                    btnRiwayat.setAttribute('aria-selected', 'false');
+                }
+            }
+        }
+
         document.querySelectorAll('[data-finding-verification]').forEach((form) => {
             const note = form.querySelector('[data-verification-note]');
             const notOkButton = form.querySelector('[data-verification-not-ok]');

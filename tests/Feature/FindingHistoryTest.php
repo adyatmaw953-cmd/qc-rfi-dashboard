@@ -214,7 +214,6 @@ class FindingHistoryTest extends TestCase
             ->assertSee('Re-inspect 1x')
             ->assertSee('Not OK 1x')
             ->assertSee('History Finding')
-            ->assertSee('Riwayat aktivitas')
             ->assertSee('Riwayat Re-Inspect');
     }
 

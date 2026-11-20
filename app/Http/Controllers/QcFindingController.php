@@ -11,6 +11,8 @@ use App\Models\FindingActivity;
 use App\Models\FindingEvidence;
 use App\Models\Project;
 use App\Models\QcFinding;
+use App\Models\Rfi;
+use App\Models\User;
 use App\Services\FindingActivityRecorder;
 use App\Services\FindingHistoryRecorder;
 use App\Services\NotificationDispatcher;
@@ -59,6 +61,7 @@ class QcFindingController extends Controller
                 'submissions.verifiedBy:id,name',
                 'submissions.evidences:id,finding_submission_id,original_name,path,mime,size',
                 'latestActivity.actor:id,name,role',
+                'activities.actor:id,name,role',
             ])
             ->whereHas('rfi', function (Builder $query) use ($project, $allowedCategories): void {
                 $query->where('project_id', $project->id)
@@ -68,7 +71,31 @@ class QcFindingController extends Controller
             ->orderByDesc('id')
             ->get();
 
-        abort_if($allFindings->isEmpty(), 404);
+        // Validate rfi_baru parameter (Category A RFI → show form at top)
+        $rfiBaru = null;
+        $rfiBaruError = null;
+        $rfiBaru_id = (int) $request->query('rfi_baru', 0);
+        if ($rfiBaru_id > 0) {
+            if (! in_array($role, ['admin', 'qc_qa'], true)) {
+                $rfiBaruError = 'Anda tidak memiliki izin untuk menentukan tindakan QC Incoming Material.';
+            } else {
+                $candidateRfi = Rfi::query()
+                    ->where('id', $rfiBaru_id)
+                    ->where('project_id', $project->id)
+                    ->where('category', 'A')
+                    ->where('status', 'open')
+                    ->first();
+                if (! $candidateRfi) {
+                    $rfiBaruError = 'RFI tidak ditemukan, bukan kategori A, bukan milik project ini, atau sudah tidak berstatus open.';
+                } elseif ($candidateRfi->qcFinding()->exists()) {
+                    $rfiBaruError = 'RFI ini sudah memiliki temuan QC.';
+                } else {
+                    $rfiBaru = $candidateRfi;
+                }
+            }
+        }
+
+        abort_if($allFindings->isEmpty() && $rfiBaru === null, 404);
 
         $isAdmin = $role === 'admin';
         $canUpdateDueDate = in_array($role, ['admin', 'qc_qa'], true);
@@ -221,7 +248,9 @@ class QcFindingController extends Controller
             'selectedFinding',
             'activities',
             'activitiesTotalCount',
-            'totalActivities'
+            'totalActivities',
+            'rfiBaru',
+            'rfiBaruError'
         ));
     }
 
@@ -319,6 +348,11 @@ class QcFindingController extends Controller
                 }
 
                 $lockedFinding->status = 'waiting_verification';
+
+                // Mentor rule: reset due_date to today + 1 day in Asia/Jakarta
+                $oldDueDate = $lockedFinding->due_date?->format('Y-m-d');
+                $newDueDate = Carbon::now('Asia/Jakarta')->addDay()->toDateString();
+                $lockedFinding->due_date = $newDueDate;
                 $lockedFinding->save();
 
                 FindingHistoryRecorder::record(
@@ -335,6 +369,23 @@ class QcFindingController extends Controller
                     type: FindingActivity::TYPE_REINSPECT_SUBMITTED,
                     actor: $request->user(),
                     meta: ['round' => $submission->round_no, 'submission_id' => $submission->id],
+                );
+
+                FindingHistoryRecorder::record(
+                    finding: $lockedFinding,
+                    event: 'due_date_changed',
+                    actor: $request->user(),
+                    old: $oldDueDate,
+                    new: $newDueDate,
+                    meta: ['auto_reset' => true],
+                );
+
+                FindingActivityRecorder::record(
+                    finding: $lockedFinding,
+                    type: FindingActivity::TYPE_DUE_DATE_CHANGED,
+                    actor: $request->user(),
+                    meta: ['from' => $oldDueDate, 'to' => $newDueDate, 'auto_reset' => true],
+                    note: 'Due date direset otomatis',
                 );
 
                 return $lockedFinding->rfi()->value('project_id');
@@ -560,6 +611,154 @@ class QcFindingController extends Controller
         $finding->loadMissing('rfi');
         abort_unless($finding->rfi?->category === 'A', 400);
 
+        $parsed = $this->validateAndParseIncomingMaterial($request);
+        if ($parsed instanceof RedirectResponse) {
+            return $parsed;
+        }
+
+        [$rows, $materialString, $materialDetails, $reasonString, $resultEnum, $isReject] = $parsed;
+
+        $projectId = DB::transaction(function () use ($finding, $rows, $materialString, $materialDetails, $reasonString, $resultEnum, $request): int {
+            $lockedFinding = QcFinding::query()->whereKey($finding->id)->lockForUpdate()->firstOrFail();
+            $lockedRfi = $lockedFinding->rfi()->lockForUpdate()->firstOrFail();
+
+            abort_if(
+                $lockedFinding->status === 'closed' || $lockedRfi->status === 'close' || in_array($lockedRfi->result, [RfiResult::UseAsIs, RfiResult::Reject], true),
+                400,
+                'Temuan sudah ditutup atau RFI sudah memiliki hasil akhir.'
+            );
+
+            $this->applyIncomingMaterialToFindingAndRfi(
+                $lockedFinding,
+                $lockedRfi,
+                $rows,
+                $materialString,
+                $materialDetails,
+                $reasonString,
+                $resultEnum,
+                $request->user(),
+                $request->input('result')
+            );
+
+            return $lockedRfi->project_id;
+        });
+
+        if ($isReject) {
+            try {
+                $finding->refresh();
+                app(NotificationDispatcher::class)->warehouseFindingRejected($finding, $request->user());
+            } catch (Throwable $e) {
+                report($e);
+            }
+        } elseif ($resultEnum === RfiResult::UseAsIs) {
+            try {
+                $finding->refresh();
+                app(NotificationDispatcher::class)->warehouseFindingUseAsIs($finding, $request->user());
+            } catch (Throwable $e) {
+                report($e);
+            }
+        }
+
+        return redirect()->route('qc-finding.project', ['project' => $projectId])
+            ->with('success', 'Tindakan QC Incoming Material berhasil disimpan'.($isReject ? ' dan notifikasi dikirim ke Warehouse.' : '.'));
+    }
+
+    public function storeIncomingMaterial(Request $request, Rfi $rfi): RedirectResponse
+    {
+        abort_unless(in_array($request->user()->role, ['admin', 'qc_qa'], true), 403);
+        abort_unless($rfi->category === 'A', 400);
+        abort_unless($rfi->status === 'open' && ! $rfi->qcFinding()->exists() && $rfi->result === null, 400);
+
+        $parsed = $this->validateAndParseIncomingMaterial($request);
+        if ($parsed instanceof RedirectResponse) {
+            return $parsed;
+        }
+
+        [$rows, $materialString, $materialDetails, $reasonString, $resultEnum, $isReject] = $parsed;
+
+        $createdFinding = null;
+        $projectId = DB::transaction(function () use ($rfi, $rows, $materialString, $materialDetails, $reasonString, $resultEnum, $request, &$createdFinding): int {
+            $lockedRfi = Rfi::query()->whereKey($rfi->id)->lockForUpdate()->firstOrFail();
+            abort_unless(
+                $lockedRfi->category === 'A' && $lockedRfi->status === 'open' && ! $lockedRfi->qcFinding()->exists() && $lockedRfi->result === null,
+                400,
+                'Temuan sudah ditutup atau RFI sudah memiliki hasil akhir.'
+            );
+
+            $nowJakarta = Carbon::now('Asia/Jakarta');
+            $nowUtc = Carbon::now('UTC');
+
+            $finding = QcFinding::query()->create([
+                'rfi_id' => $lockedRfi->id,
+                'result' => $resultEnum,
+                'finding_list' => $reasonString,
+                'action_plan' => $materialString,
+                'action_plan_by' => $request->user()->id,
+                'action_plan_at' => $nowUtc,
+                'date_of_finding' => $nowJakarta->toDateString(),
+                'due_date' => $nowJakarta->copy()->addDay()->toDateString(),
+                'status' => 'open',
+                'date_of_close' => null,
+            ]);
+
+            $createdFinding = $finding;
+
+            $rfiSubmitter = $lockedRfi->created_by ? User::find($lockedRfi->created_by) : null;
+            FindingActivityRecorder::record(
+                finding: $finding,
+                type: FindingActivity::TYPE_RFI_SUBMITTED,
+                actor: $rfiSubmitter,
+                meta: ['rfi_no' => $lockedRfi->rfi_no],
+                at: $lockedRfi->submitted_at ? Carbon::instance($lockedRfi->submitted_at) : $nowUtc,
+            );
+            FindingActivityRecorder::record(
+                finding: $finding,
+                type: FindingActivity::TYPE_FINDING_CREATED,
+                actor: $request->user(),
+                meta: array_filter([
+                    'disposition' => $resultEnum->value,
+                    'rfi_no' => $lockedRfi->rfi_no,
+                ]),
+                at: Carbon::instance($finding->created_at ?? $nowUtc),
+            );
+
+            $this->applyIncomingMaterialToFindingAndRfi(
+                $finding,
+                $lockedRfi,
+                $rows,
+                $materialString,
+                $materialDetails,
+                $reasonString,
+                $resultEnum,
+                $request->user(),
+                $request->input('result')
+            );
+
+            return $lockedRfi->project_id;
+        });
+
+        if ($isReject && $createdFinding) {
+            try {
+                $createdFinding->refresh();
+                app(NotificationDispatcher::class)->warehouseFindingRejected($createdFinding, $request->user());
+            } catch (Throwable $e) {
+                report($e);
+            }
+        } elseif ($resultEnum === RfiResult::UseAsIs && $createdFinding) {
+            try {
+                $createdFinding->refresh();
+                app(NotificationDispatcher::class)->warehouseFindingUseAsIs($createdFinding, $request->user());
+            } catch (Throwable $e) {
+                report($e);
+            }
+        }
+
+        return redirect()->route('qc-finding.project', ['project' => $projectId])
+            ->with('success', 'Tindakan QC Incoming Material berhasil disimpan'.($isReject ? ' dan notifikasi dikirim ke Warehouse.' : '.'));
+    }
+
+    private function validateAndParseIncomingMaterial(Request $request): array|RedirectResponse
+    {
         $request->validate([
             'result' => ['required', Rule::in(['use_as_is', 'reject'])],
             'items' => ['nullable', 'array'],
@@ -640,60 +839,63 @@ class QcFindingController extends Controller
         $resultEnum = RfiResult::from($request->input('result'));
         $isReject = ($request->input('result') === 'reject');
 
-        $projectId = DB::transaction(function () use ($finding, $rows, $materialString, $materialDetails, $reasonString, $resultEnum, $request): int {
-            $lockedFinding = QcFinding::query()->whereKey($finding->id)->lockForUpdate()->firstOrFail();
-            $lockedRfi = $lockedFinding->rfi()->lockForUpdate()->firstOrFail();
+        return [$rows, $materialString, $materialDetails, $reasonString, $resultEnum, $isReject];
+    }
 
-            $lockedFinding->finding_list = $reasonString;
-            $lockedFinding->action_plan = $materialString;
-            $lockedFinding->action_plan_by = $request->user()->id;
-            $lockedFinding->action_plan_at = Carbon::now('UTC');
-            $lockedFinding->result = $resultEnum;
-            $lockedFinding->status = 'closed';
-            $lockedFinding->date_of_close = Carbon::now('Asia/Jakarta')->toDateString();
-            $lockedFinding->save();
+    private function applyIncomingMaterialToFindingAndRfi(
+        QcFinding $finding,
+        Rfi $rfi,
+        array $rows,
+        string $materialString,
+        mixed $materialDetails,
+        string $reasonString,
+        RfiResult $resultEnum,
+        User $actor,
+        string $resultInput
+    ): void {
+        abort_if(
+            $finding->status === 'closed' || $rfi->status === 'close' || in_array($rfi->result, [RfiResult::UseAsIs, RfiResult::Reject], true),
+            400,
+            'Temuan sudah ditutup atau RFI sudah memiliki hasil akhir.'
+        );
 
-            FindingHistoryRecorder::record(
-                finding: $lockedFinding,
-                event: 'closed_incoming',
-                actor: $request->user(),
-                meta: [
-                    'result' => $request->input('result'),
-                ],
-            );
+        $finding->finding_list = $reasonString;
+        $finding->action_plan = $materialString;
+        $finding->action_plan_by = $actor->id;
+        $finding->action_plan_at = Carbon::now('UTC');
+        $finding->result = $resultEnum;
+        $finding->status = 'closed';
+        $finding->date_of_close = Carbon::now('Asia/Jakarta')->toDateString();
+        $finding->save();
 
-            FindingActivityRecorder::record(
-                finding: $lockedFinding,
-                type: FindingActivity::TYPE_ACTION_PLAN_SAVED,
-                actor: $request->user(),
-                meta: ['first' => true],
-            );
+        FindingHistoryRecorder::record(
+            finding: $finding,
+            event: 'closed_incoming',
+            actor: $actor,
+            meta: [
+                'result' => $resultInput,
+            ],
+        );
 
-            $details = is_array($lockedRfi->details)
-                ? $lockedRfi->details
-                : (json_decode($lockedRfi->details ?? '', true) ?: []);
-            $details['material'] = $materialDetails;
-            $details['incoming_findings'] = $rows;
-            $lockedRfi->details = $details;
-            $lockedRfi->result = $resultEnum;
-            $lockedRfi->qc_note = $reasonString;
-            $lockedRfi->status = ($resultEnum === RfiResult::UseAsIs) ? 'close' : 'nc';
-            $lockedRfi->save();
+        FindingActivityRecorder::record(
+            finding: $finding,
+            type: FindingActivity::TYPE_ACTION_PLAN_SAVED,
+            actor: $actor,
+            meta: ['first' => true],
+        );
 
-            return $lockedRfi->project_id;
-        });
-
-        if ($isReject) {
-            try {
-                $finding->refresh();
-                app(NotificationDispatcher::class)->warehouseFindingRejected($finding, $request->user());
-            } catch (Throwable $e) {
-                report($e);
-            }
-        }
-
-        return redirect()->route('qc-finding.project', ['project' => $projectId])
-            ->with('success', 'Tindakan QC Incoming Material berhasil disimpan'.($isReject ? ' dan notifikasi dikirim ke Warehouse.' : '.'));
+        $details = is_array($rfi->details)
+            ? $rfi->details
+            : (json_decode($rfi->details ?? '', true) ?: []);
+        $details['material'] = $materialDetails;
+        $details['incoming_findings'] = $rows;
+        $rfi->details = $details;
+        $rfi->result = $resultEnum;
+        $rfi->qc_note = $reasonString;
+        $rfi->status = ($resultEnum === RfiResult::UseAsIs) ? 'close' : 'nc';
+        $rfi->reviewed_by ??= $actor->id;
+        $rfi->reviewed_at ??= Carbon::now('UTC');
+        $rfi->save();
     }
 
     private function closeRelatedRfi(QcFinding $finding): void

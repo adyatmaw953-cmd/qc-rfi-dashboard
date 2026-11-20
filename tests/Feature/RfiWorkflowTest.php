@@ -82,7 +82,7 @@ class RfiWorkflowTest extends TestCase
                 ->assertRedirect(route('rfi.category', ['kategori' => $category]));
         }
 
-        foreach (['A', 'E'] as $category) {
+        foreach (['A', 'E', 'F'] as $category) {
             $this->actingAs($production)
                 ->post(route('rfi.store', ['kategori' => $category]), [
                     'project_id' => $project->id,
@@ -123,6 +123,11 @@ class RfiWorkflowTest extends TestCase
                 'scheduled_at' => '2026-10-02',
                 'details' => ['process' => 'Coating', 'drawing_no' => 'DWG-E-001'],
             ],
+            'F' => [
+                'project_id' => $project->id,
+                'date_inspect' => '2026-10-01',
+                'details' => ['jenis_inspeksi' => 'Welding inspection'],
+            ],
         ];
 
         foreach ($categoryInputs as $category => $input) {
@@ -136,7 +141,97 @@ class RfiWorkflowTest extends TestCase
             ->post(route('rfi.store', ['kategori' => 'A']), $this->categoryAInput($project))
             ->assertForbidden();
 
-        $this->assertDatabaseCount('rfis', 5);
+        $this->assertDatabaseCount('rfis', 6);
+    }
+
+    public function test_ppic_can_create_category_f_inspection_by_customer(): void
+    {
+        $ppic = User::factory()->create(['role' => 'ppic']);
+        $project = Project::factory()->create(['customer' => 'PT Sinar Energi']);
+
+        // Must provide jenis_inspeksi
+        $this->actingAs($ppic)
+            ->post(route('rfi.store', ['kategori' => 'F']), [
+                'project_id' => $project->id,
+                'date_inspect' => '2026-10-01',
+                'details' => [],
+            ])
+            ->assertSessionHasErrors('details.jenis_inspeksi');
+
+        $this->assertDatabaseCount('rfis', 0);
+
+        // Valid submission with standard jenis_inspeksi
+        $this->post(route('rfi.store', ['kategori' => 'F']), [
+            'project_id' => $project->id,
+            'date_inspect' => '2026-10-01',
+            'details' => ['jenis_inspeksi' => 'Welding inspection'],
+        ])->assertRedirect(route('rfi.category', ['kategori' => 'F']));
+
+        $rfi = Rfi::query()->firstOrFail();
+        $this->assertSame('F', $rfi->category);
+        $this->assertSame('Welding inspection', $rfi->details['jenis_inspeksi']);
+        $this->assertSame('RFI-F-0001', $rfi->rfi_no);
+    }
+
+    public function test_category_f_additional_inspection_requires_additional_name(): void
+    {
+        $ppic = User::factory()->create(['role' => 'ppic']);
+        $project = Project::factory()->create();
+
+        // Additional without name should fail
+        $this->actingAs($ppic)
+            ->post(route('rfi.store', ['kategori' => 'F']), [
+                'project_id' => $project->id,
+                'date_inspect' => '2026-10-01',
+                'details' => [
+                    'jenis_inspeksi' => 'Additional',
+                    'additional_name' => '',
+                ],
+            ])
+            ->assertSessionHasErrors('details.additional_name');
+
+        $this->assertDatabaseCount('rfis', 0);
+
+        // Additional with name should succeed
+        $this->post(route('rfi.store', ['kategori' => 'F']), [
+            'project_id' => $project->id,
+            'date_inspect' => '2026-10-01',
+            'details' => [
+                'jenis_inspeksi' => 'Additional',
+                'additional_name' => 'Hydrotest',
+            ],
+        ])->assertRedirect(route('rfi.category', ['kategori' => 'F']));
+
+        $rfi = Rfi::query()->firstOrFail();
+        $this->assertSame('Additional', $rfi->details['jenis_inspeksi']);
+        $this->assertSame('Hydrotest', $rfi->details['additional_name']);
+    }
+
+    public function test_category_f_create_form_renders_for_ppic(): void
+    {
+        $ppic = User::factory()->create(['role' => 'ppic']);
+
+        $this->actingAs($ppic)
+            ->get(route('rfi.create', ['kategori' => 'F']))
+            ->assertOk()
+            ->assertSee('Inspection by Customer')
+            ->assertSee('Jenis inspeksi')
+            ->assertSee('Welding inspection')
+            ->assertSee('Additional');
+    }
+
+    public function test_production_cannot_create_category_f(): void
+    {
+        $production = User::factory()->create(['role' => 'production']);
+        $project = Project::factory()->create();
+
+        $this->actingAs($production)
+            ->post(route('rfi.store', ['kategori' => 'F']), [
+                'project_id' => $project->id,
+                'date_inspect' => '2026-10-01',
+                'details' => ['jenis_inspeksi' => 'Welding inspection'],
+            ])
+            ->assertForbidden();
     }
 
     public function test_testing_fabrication_requires_a_test_type(): void
@@ -249,14 +344,14 @@ class RfiWorkflowTest extends TestCase
     public function test_admin_can_give_first_qc_result(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
-        $rfi = $this->makeRfi('A');
+        $rfi = $this->makeRfi('B');
 
         $this->actingAs($admin)
-            ->post(route('rfi.review', ['kategori' => 'A', 'rfi' => $rfi]), [
+            ->post(route('rfi.review', ['kategori' => 'B', 'rfi' => $rfi]), [
                 'result' => RfiResult::UseAsIs->value,
                 'qc_note' => 'Diterima dengan catatan',
             ])
-            ->assertRedirect(route('rfi.category', ['kategori' => 'A']));
+            ->assertRedirect(route('rfi.category', ['kategori' => 'B']));
 
         $rfi->refresh();
         $this->assertSame('nc', $rfi->status);
@@ -877,13 +972,13 @@ class RfiWorkflowTest extends TestCase
 
         $response = $this->actingAs($qc)->post(route('rfi.finding', ['kategori' => 'A', 'rfi' => $rfi]));
 
-        $finding = QcFinding::query()->where('rfi_id', $rfi->id)->firstOrFail();
-        $this->assertSame('open', $finding->status);
-        $this->assertSame('nc', $rfi->fresh()->status);
+        $this->assertDatabaseMissing('qc_findings', ['rfi_id' => $rfi->id]);
+        $this->assertSame('open', $rfi->fresh()->status);
+        $this->assertNull($rfi->fresh()->result);
 
         $response->assertRedirect(route('qc-finding.project', [
             'project' => $project->id,
-            'buka' => $finding->id,
+            'rfi_baru' => $rfi->id,
         ]));
     }
 
@@ -1170,20 +1265,61 @@ class RfiWorkflowTest extends TestCase
         $this->assertSame('close', $rfiAcc->status);
         $this->assertSame(RfiResult::Accepted, $rfiAcc->result);
 
-        // 2. Review Finding (Repair)
-        $rfiFinding = $this->makeRfi('A', 'open', $project, $warehouse);
+        // 2. Review Finding (Repair) on category A is rejected (422)
+        $rfiFindingA = $this->makeRfi('A', 'open', $project, $warehouse);
         $this->actingAs($qc)
-            ->post(route('rfi.review', ['kategori' => 'A', 'rfi' => $rfiFinding]), [
+            ->post(route('rfi.review', ['kategori' => 'A', 'rfi' => $rfiFindingA]), [
                 'result' => 'repair',
                 'qc_note' => 'Dimensi plat kurang 2 mm dari spesifikasi',
             ])
-            ->assertRedirect(route('rfi.category', ['kategori' => 'A']));
+            ->assertStatus(422);
 
-        $rfiFinding->refresh();
-        $this->assertSame('nc', $rfiFinding->status);
-        $this->assertSame(RfiResult::Repair, $rfiFinding->result);
-        $this->assertNotNull($rfiFinding->qcFinding);
-        $this->assertSame('Dimensi plat kurang 2 mm dari spesifikasi', $rfiFinding->qcFinding->finding_list);
+        // 3. Review Finding (Repair) on category B is accepted
+        $production = User::factory()->create(['role' => 'production']);
+        $rfiFindingB = $this->makeRfi('B', 'open', $project, $production);
+        $this->actingAs($qc)
+            ->post(route('rfi.review', ['kategori' => 'B', 'rfi' => $rfiFindingB]), [
+                'result' => 'repair',
+                'qc_note' => 'Dimensi plat kurang 2 mm dari spesifikasi',
+            ])
+            ->assertRedirect(route('rfi.category', ['kategori' => 'B']));
+
+        $rfiFindingB->refresh();
+        $this->assertSame('nc', $rfiFindingB->status);
+        $this->assertSame(RfiResult::Repair, $rfiFindingB->result);
+        $this->assertNotNull($rfiFindingB->qcFinding);
+        $this->assertSame('Dimensi plat kurang 2 mm dari spesifikasi', $rfiFindingB->qcFinding->finding_list);
+    }
+
+    public function test_category_a_review_rejects_all_non_accepted_results_while_other_categories_accept_them(): void
+    {
+        $qc = User::factory()->create(['role' => 'qc_qa']);
+        $warehouse = User::factory()->create(['role' => 'warehouse']);
+        $production = User::factory()->create(['role' => 'production']);
+        $project = Project::factory()->create();
+
+        // Category A with Reject -> 422
+        $rfiA1 = $this->makeRfi('A', 'open', $project, $warehouse);
+        $this->actingAs($qc)->post(route('rfi.review', ['kategori' => 'A', 'rfi' => $rfiA1]), [
+            'result' => 'reject',
+            'qc_note' => 'Kualitas buruk',
+        ])->assertStatus(422);
+
+        // Category A with Use as is -> 422
+        $rfiA2 = $this->makeRfi('A', 'open', $project, $warehouse);
+        $this->actingAs($qc)->post(route('rfi.review', ['kategori' => 'A', 'rfi' => $rfiA2]), [
+            'result' => 'use_as_is',
+            'qc_note' => 'Ada goresan',
+        ])->assertStatus(422);
+
+        // Categories B to E with non-accepted results -> accepted (redirect)
+        foreach (['B', 'C', 'D', 'E'] as $cat) {
+            $rfi = $this->makeRfi($cat, 'open', $project, $production);
+            $this->actingAs($qc)->post(route('rfi.review', ['kategori' => $cat, 'rfi' => $rfi]), [
+                'result' => 'repair',
+                'qc_note' => "Cat {$cat} perlu perbaikan",
+            ])->assertRedirect(route('rfi.category', ['kategori' => $cat]));
+        }
     }
 
     public function test_fabrication_form_has_general_fields_and_no_detail_section(): void

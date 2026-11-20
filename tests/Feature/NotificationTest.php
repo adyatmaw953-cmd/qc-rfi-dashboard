@@ -124,25 +124,25 @@ class NotificationTest extends TestCase
 
     public function test_rfi_reviewed_nc_notifies_production_and_non_production_creator(): void
     {
-        $warehouse = User::factory()->create(['role' => 'warehouse']);
+        $adminCreator = User::factory()->create(['role' => 'admin']);
         $production = User::factory()->create(['role' => 'production']);
         $qcqa = User::factory()->create(['role' => 'qc_qa']);
         $project = Project::factory()->create();
 
         $rfi = Rfi::factory()->create([
             'project_id' => $project->id,
-            'category' => 'A',
-            'created_by' => $warehouse->id,
+            'category' => 'B',
+            'created_by' => $adminCreator->id,
             'status' => 'open',
             'result' => null,
         ]);
 
         $this->actingAs($qcqa)
-            ->post(route('rfi.review', ['kategori' => 'A', 'rfi' => $rfi]), [
+            ->post(route('rfi.review', ['kategori' => 'B', 'rfi' => $rfi]), [
                 'result' => RfiResult::Repair->value,
                 'qc_note' => 'Material thickness is out of spec',
             ])
-            ->assertRedirect(route('rfi.category', ['kategori' => 'A']));
+            ->assertRedirect(route('rfi.category', ['kategori' => 'B']));
 
         $qcFinding = QcFinding::query()->where('rfi_id', $rfi->id)->firstOrFail();
 
@@ -154,15 +154,48 @@ class NotificationTest extends TestCase
         $this->assertSame(route('qc-finding.project', ['project' => $project->id]), $prodNotification->data['url']);
         $this->assertSame($qcFinding->id, $prodNotification->data['finding_id']);
 
-        // Warehouse creator receives RfiNc
-        $this->assertSame(1, $warehouse->notifications()->count());
-        $whNotification = $warehouse->notifications()->first();
+        // Non-production creator receives RfiNc
+        $this->assertSame(1, $adminCreator->notifications()->count());
+        $whNotification = $adminCreator->notifications()->first();
         $this->assertSame(RfiNc::class, $whNotification->type);
         $this->assertSame('rfi.reviewed_nc', $whNotification->data['type']);
-        $this->assertSame(route('rfi.category', ['kategori' => 'A']), $whNotification->data['url']);
+        $this->assertSame(route('rfi.category', ['kategori' => 'B']), $whNotification->data['url']);
         $this->assertSame($qcFinding->id, $whNotification->data['finding_id']);
 
         // Actor does not receive
+        $this->assertSame(0, $qcqa->notifications()->count());
+    }
+
+    public function test_warehouse_finding_use_as_is_sends_exactly_one_notification_to_warehouse_and_never_to_actor(): void
+    {
+        $warehouse = User::factory()->create(['role' => 'warehouse']);
+        $qcqa = User::factory()->create(['role' => 'qc_qa']);
+        $project = Project::factory()->create();
+
+        $rfi = Rfi::query()->create([
+            'project_id' => $project->id,
+            'category' => 'A',
+            'rfi_no' => 'RFI-A-7701',
+            'created_by' => $warehouse->id,
+            'status' => 'open',
+            'date_inspect' => '2026-10-01',
+            'details' => ['material' => 'Pipa'],
+        ]);
+
+        $this->actingAs($qcqa)->post(route('qc-finding.incoming.store', ['rfi' => $rfi->id]), [
+            'material' => 'Pipa',
+            'reason_of_finding' => 'Goresan ringan',
+            'result' => 'use_as_is',
+        ])->assertRedirect();
+
+        // Warehouse receives exactly 1 notification
+        $this->assertSame(1, $warehouse->notifications()->count());
+        $notification = $warehouse->notifications()->first();
+        $this->assertSame('finding.warehouse_use_as_is', $notification->data['type']);
+        $this->assertStringContainsString('Use as is', $notification->data['title']);
+        $this->assertStringContainsString('RFI-A-7701', $notification->data['body']);
+
+        // Actor (QC) does not receive any
         $this->assertSame(0, $qcqa->notifications()->count());
     }
 
@@ -389,7 +422,7 @@ class NotificationTest extends TestCase
         // RFI already closed
         $rfi = Rfi::factory()->create([
             'project_id' => $project->id,
-            'category' => 'A',
+            'category' => 'B',
             'created_by' => $warehouse->id,
             'status' => 'close',
             'result' => RfiResult::Accepted,
@@ -397,7 +430,7 @@ class NotificationTest extends TestCase
 
         // Review attempt should fail with validation exception
         $this->actingAs($qcqa)
-            ->post(route('rfi.review', ['kategori' => 'A', 'rfi' => $rfi]), [
+            ->post(route('rfi.review', ['kategori' => 'B', 'rfi' => $rfi]), [
                 'result' => RfiResult::Repair->value,
                 'qc_note' => 'Cannot review closed',
             ])

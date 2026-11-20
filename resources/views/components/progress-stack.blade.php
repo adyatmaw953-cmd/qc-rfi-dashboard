@@ -37,18 +37,18 @@
     </div>
 
     @if ($showLegend)
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-muted">
+        <div class="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[12px] sm:text-[13px] text-muted">
             <div class="flex items-center gap-1.5">
                 <span class="inline-block h-[9px] w-[9px] rounded-[3px] bg-[#8DB6E8]" aria-hidden="true"></span>
-                <span>Open: <strong class="font-mono font-bold text-ink">{{ $openCount }}</strong></span>
+                <span><strong class="font-mono font-semibold text-ink">{{ $openCount }}</strong> Open</span>
             </div>
             <div class="flex items-center gap-1.5">
                 <span class="inline-block h-[9px] w-[9px] rounded-[3px] bg-[#E07B2E]" aria-hidden="true"></span>
-                <span>Menunggu verifikasi: <strong class="font-mono font-bold text-ink">{{ $verifCount }}</strong></span>
+                <span><strong class="font-mono font-semibold text-ink">{{ $verifCount }}</strong> Verifikasi</span>
             </div>
             <div class="flex items-center gap-1.5">
                 <span class="inline-block h-[9px] w-[9px] rounded-[3px] bg-[#1F5B2A]" aria-hidden="true"></span>
-                <span>Closed: <strong class="font-mono font-bold text-ink">{{ $closedCount }}</strong></span>
+                <span><strong class="font-mono font-semibold text-ink">{{ $closedCount }}</strong> Closed</span>
             </div>
         </div>
     @endif

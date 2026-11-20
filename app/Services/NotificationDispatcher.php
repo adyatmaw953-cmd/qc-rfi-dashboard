@@ -295,7 +295,7 @@ class NotificationDispatcher
             $rfi = $finding->rfi;
             $recipient = $rfi?->createdBy;
 
-            if (! $recipient || $recipient->id === $actor->id) {
+            if (! $recipient || ! $recipient->is_active || $recipient->id === $actor->id) {
                 return;
             }
 
@@ -319,6 +319,37 @@ class NotificationDispatcher
         }
     }
 
+    public function warehouseFindingUseAsIs(QcFinding $finding, User $actor): void
+    {
+        try {
+            $finding->loadMissing(['rfi.project', 'rfi.createdBy']);
+            $rfi = $finding->rfi;
+            $recipient = $rfi?->createdBy;
+
+            if (! $recipient || ! $recipient->is_active || $recipient->id === $actor->id) {
+                return;
+            }
+
+            $payload = [
+                'type' => 'finding.warehouse_use_as_is',
+                'title' => 'Incoming Material Diterima (Use as is)',
+                'body' => "Incoming Material {$rfi->rfi_no} diterima (Use as is) oleh {$actor->name}.",
+                'url' => route('qc-finding.project', ['project' => $rfi->project_id]),
+                'rfi_id' => $rfi->id,
+                'rfi_no' => $rfi->rfi_no,
+                'finding_id' => $finding->id,
+                'category' => $rfi->category,
+                'project_name' => $rfi->project?->project_name ?? '',
+                'actor_name' => $actor->name,
+                'actor_role' => $actor->role,
+            ];
+
+            $this->sendNotification(collect([$recipient]), new RfiReviewedOk($payload));
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
     /**
      * @return Collection<int, User>
      */
@@ -335,12 +366,12 @@ class NotificationDispatcher
         $accounts = $eventConfig['accounts'] ?? [];
 
         $roleUsers = ! empty($roles)
-            ? User::query()->whereIn('role', $roles)->get()
+            ? User::query()->where('is_active', true)->whereIn('role', $roles)->get()
             : collect();
 
         $accountUserIds = $this->resolveAccountUserIds($accounts, $rfi, $finding, $submission);
         $accountUsers = ! empty($accountUserIds)
-            ? User::query()->whereIn('id', $accountUserIds)->get()
+            ? User::query()->where('is_active', true)->whereIn('id', $accountUserIds)->get()
             : collect();
 
         return $roleUsers
@@ -423,6 +454,10 @@ class NotificationDispatcher
      */
     protected function sendNotification(Collection $users, Notification $notification): void
     {
-        NotificationFacade::send($users, $notification);
+        $activeUsers = $users->filter(fn (User $user): bool => (bool) $user->is_active);
+
+        if ($activeUsers->isNotEmpty()) {
+            NotificationFacade::send($activeUsers, $notification);
+        }
     }
 }

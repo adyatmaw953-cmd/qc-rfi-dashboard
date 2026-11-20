@@ -14,14 +14,57 @@ document.addEventListener('DOMContentLoaded', () => {
         const dropzone = wrapper.querySelector('.evidence-dropzone');
         const input = wrapper.querySelector('.evidence-file-input');
         const fileList = wrapper.querySelector('.evidence-file-list');
+        const errorList = wrapper.querySelector('.evidence-error-list');
+        const totalSizeEl = wrapper.querySelector('.evidence-total-size');
+        const totalSizeVal = wrapper.querySelector('.evidence-total-size-value');
+        const form = wrapper.closest('form');
 
         if (!dropzone || !input || !fileList) return;
 
-        const updateFileList = () => {
-            fileList.innerHTML = '';
-            const files = Array.from(input.files || []);
+        const effectiveLimit = parseInt(wrapper.dataset.effectiveFileLimit, 10) || (10 * 1024 * 1024);
+        const postMaxSize = parseInt(wrapper.dataset.postMaxSize, 10) || (10 * 1024 * 1024);
+        const allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
 
-            files.forEach((file, index) => {
+        let currentFiles = [];
+
+        const formatSize = (bytes) => {
+            if (bytes >= 1024 * 1024) {
+                const mb = (bytes / (1024 * 1024)).toFixed(1).replace('.', ',');
+                return `${mb} MB`;
+            }
+            const kb = (bytes / 1024).toFixed(0);
+            return `${kb} KB`;
+        };
+
+        const formatLimit = (bytes) => {
+            const mb = bytes / (1024 * 1024);
+            if (Number.isInteger(mb)) {
+                return `${mb} MB`;
+            }
+            return `${mb.toFixed(1).replace('.', ',')} MB`;
+        };
+
+        const syncDataTransfer = () => {
+            const dt = new DataTransfer();
+            currentFiles.forEach((file) => dt.items.add(file));
+            input.files = dt.files;
+        };
+
+        const renderErrors = (messages) => {
+            if (!errorList) return;
+            errorList.innerHTML = '';
+            messages.forEach((msg) => {
+                const p = document.createElement('p');
+                p.className = 'text-[12px] font-medium text-[#8F3F08]';
+                p.textContent = msg;
+                errorList.appendChild(p);
+            });
+        };
+
+        const renderFileList = () => {
+            fileList.innerHTML = '';
+
+            currentFiles.forEach((file, index) => {
                 const chip = document.createElement('div');
                 chip.className = 'inline-flex items-center gap-2 rounded-lg border border-[#E1DED3] bg-[#FBFAF6] px-3 py-1.5 text-[12px] text-[#14201A]';
 
@@ -31,24 +74,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const sizeSpan = document.createElement('span');
                 sizeSpan.className = 'font-mono text-[11px] text-[#5B665E]';
-                const sizeKb = (file.size / 1024).toFixed(0);
-                const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-                sizeSpan.textContent = file.size > 1024 * 1024 ? `${sizeMb} MB` : `${sizeKb} KB`;
+                sizeSpan.textContent = formatSize(file.size);
 
                 const removeBtn = document.createElement('button');
                 removeBtn.type = 'button';
-                removeBtn.className = 'ml-1 text-[#8F3F08] hover:text-[#B4470F] font-bold text-[14px] leading-none';
+                removeBtn.className = 'ml-1 text-[#8F3F08] hover:text-[#B4470F] font-bold text-[14px] leading-none focus:outline-none';
                 removeBtn.setAttribute('aria-label', `Hapus ${file.name}`);
                 removeBtn.innerHTML = '&times;';
                 removeBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    const dt = new DataTransfer();
-                    Array.from(input.files).forEach((f, i) => {
-                        if (i !== index) dt.items.add(f);
-                    });
-                    input.files = dt.files;
-                    updateFileList();
+                    currentFiles.splice(index, 1);
+                    syncDataTransfer();
+                    renderFileList();
                 });
 
                 chip.appendChild(nameSpan);
@@ -56,9 +94,69 @@ document.addEventListener('DOMContentLoaded', () => {
                 chip.appendChild(removeBtn);
                 fileList.appendChild(chip);
             });
+
+            if (totalSizeEl && totalSizeVal) {
+                if (currentFiles.length > 0) {
+                    const totalBytes = currentFiles.reduce((acc, f) => acc + f.size, 0);
+                    totalSizeVal.textContent = `${formatSize(totalBytes)} (${currentFiles.length} file)`;
+                    totalSizeEl.classList.remove('hidden');
+                } else {
+                    totalSizeEl.classList.add('hidden');
+                }
+            }
         };
 
-        input.addEventListener('change', updateFileList);
+        const processFiles = (newFiles) => {
+            const rejectedMessages = [];
+
+            Array.from(newFiles).forEach((file) => {
+                const isDuplicate = currentFiles.some(
+                    (f) => f.name === file.name && f.size === file.size && f.lastModified === file.lastModified
+                );
+                if (isDuplicate) {
+                    return;
+                }
+
+                const ext = file.name.split('.').pop().toLowerCase();
+                if (!allowedExtensions.includes(ext)) {
+                    const isHeic = ext === 'heic' || ext === 'heif';
+                    rejectedMessages.push(
+                        isHeic
+                            ? `${file.name}: format tidak didukung, gunakan JPG atau PNG`
+                            : `${file.name}: format tidak didukung, gunakan JPG, PNG, WEBP, atau PDF`
+                    );
+                    return;
+                }
+
+                if (file.size > effectiveLimit) {
+                    rejectedMessages.push(`${file.name}: ${formatSize(file.size)} melebihi batas ${formatLimit(effectiveLimit)}`);
+                    return;
+                }
+
+                if (currentFiles.length >= 5) {
+                    rejectedMessages.push(`${file.name}: maksimal 5 file yang dapat diunggah`);
+                    return;
+                }
+
+                const currentTotal = currentFiles.reduce((acc, f) => acc + f.size, 0);
+                if (postMaxSize > 0 && currentTotal + file.size > postMaxSize) {
+                    rejectedMessages.push(`${file.name}: total ukuran file melebihi batas server (${formatLimit(postMaxSize)})`);
+                    return;
+                }
+
+                currentFiles.push(file);
+            });
+
+            syncDataTransfer();
+            renderFileList();
+            renderErrors(rejectedMessages);
+        };
+
+        input.addEventListener('change', () => {
+            if (input.files && input.files.length > 0) {
+                processFiles(input.files);
+            }
+        });
 
         ['dragenter', 'dragover'].forEach((eventName) => {
             dropzone.addEventListener(eventName, (e) => {
@@ -77,12 +175,49 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         dropzone.addEventListener('drop', (e) => {
-            if (e.dataTransfer && e.dataTransfer.files.length > 0) {
-                input.files = e.dataTransfer.files;
-                updateFileList();
+            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                processFiles(e.dataTransfer.files);
             }
         });
+
+        if (form) {
+            const submitBtn = form.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                const originalHtml = submitBtn.innerHTML;
+
+                form.addEventListener('submit', () => {
+                    setTimeout(() => {
+                        submitBtn.disabled = true;
+                        submitBtn.setAttribute('data-original-html', originalHtml);
+                        submitBtn.innerHTML = `
+                            <svg class="mr-2 h-4 w-4 animate-spin inline" viewBox="0 0 24 24" fill="none">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                            </svg>
+                            Mengunggah...
+                        `;
+                    }, 0);
+                });
+            }
+        }
     });
+
+    window.addEventListener('pageshow', () => {
+        document.querySelectorAll('button[type="submit"][data-original-html]').forEach((btn) => {
+            btn.disabled = false;
+            btn.innerHTML = btn.getAttribute('data-original-html');
+            btn.removeAttribute('data-original-html');
+        });
+    });
+
+    const reinspectSummary = document.querySelector('.reinspect-error-summary');
+    if (reinspectSummary) {
+        const details = reinspectSummary.closest('details');
+        if (details) {
+            details.open = true;
+        }
+        reinspectSummary.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
 
     // NCR Form Logic: Navigation, Completeness, Project/Internal toggle, Cost formatting, Double-submit prevention
     const ncrForm = document.getElementById('ncr-form');

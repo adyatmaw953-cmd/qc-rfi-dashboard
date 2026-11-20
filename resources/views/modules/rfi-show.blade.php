@@ -104,6 +104,12 @@
                 &mdash; {{ $rfi->project->project_name }}
             </x-detail-item>
 
+            @if ($rfi->project?->customer)
+                <x-detail-item label="Customer">
+                    {{ $rfi->project->customer }}
+                </x-detail-item>
+            @endif
+
             {{-- Tanggal inspeksi --}}
             <x-detail-item label="Tanggal inspeksi">
                 {{ ($rfi->date_inspect && empty($rfi->details['_draft_no_date'])) ? $rfi->date_inspect->copy()->setTimezone('Asia/Jakarta')->translatedFormat('d M Y') : '—' }}

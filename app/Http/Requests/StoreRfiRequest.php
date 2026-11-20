@@ -149,6 +149,9 @@ class StoreRfiRequest extends FormRequest
             'details.drawing_no.required' => 'Drawing no wajib diisi.',
             'details.inspect_item.required' => 'Item inspeksi wajib dipilih.',
             'details.test_type.required' => 'Jenis pengujian wajib dipilih.',
+            'details.jenis_inspeksi.required' => 'Jenis inspeksi wajib dipilih.',
+            'details.additional_name.required' => 'Nama inspeksi tambahan wajib diisi.',
+            'details.additional_name.required_if' => 'Nama inspeksi tambahan wajib diisi.',
         ];
     }
 
@@ -178,7 +181,7 @@ class StoreRfiRequest extends FormRequest
             'project' => [...$rules, 'integer', 'exists:projects,id'],
             'date' => [...$rules, 'date'],
             'number' => [...$rules, 'numeric', 'min:0'],
-            'select' => [...$rules, Rule::in($field['options'])],
+            'select', 'radio' => [...$rules, Rule::in($field['options'])],
             'multi_select' => [
                 ...$rules,
                 function ($attribute, $value, $fail) {

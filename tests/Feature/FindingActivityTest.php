@@ -439,7 +439,7 @@ class FindingActivityTest extends TestCase
             ->get(route('qc-finding.project', ['project' => $finding->rfi->project_id]));
 
         $response->assertOk()
-            ->assertSee('Riwayat aktivitas')
+            ->assertSee('History Finding')
             ->assertSee($finding->rfi->rfi_no)
             ->assertSee('Rina Prod')
             ->assertSee('Terbaru')
@@ -586,7 +586,7 @@ class FindingActivityTest extends TestCase
             ->get(route('qc-finding.project', ['project' => $project->id, 'buka' => $finding->id]));
 
         $response->assertOk()
-            ->assertSee('Riwayat aktivitas')
+            ->assertSee('History Finding')
             ->assertSee('Belum ada aktivitas untuk temuan ini.');
     }
 
