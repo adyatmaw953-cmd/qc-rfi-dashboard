@@ -124,7 +124,7 @@ return [
             'roles' => ['admin', 'qc_qa', 'production'],
             'submit_roles' => ['production'],
             'general_fields' => [
-                ['name' => 'drawing_no', 'label' => 'Drawing No dari PPIC', 'type' => 'text', 'required' => true],
+                ['name' => 'drawing_no', 'label' => 'Drawing No', 'type' => 'text', 'required' => true],
                 ['name' => 'inspect_item', 'label' => 'Item inspeksi', 'type' => 'select', 'required' => true, 'options' => ['Fit Up', 'Welding', 'Before Blasting', 'Testing']],
                 ['name' => 'test_type', 'label' => 'Jenis pengujian', 'type' => 'multi_select', 'required' => false, 'required_if' => ['field' => 'inspect_item', 'value' => 'Testing'], 'show_if' => ['field' => 'inspect_item', 'value' => 'Testing'], 'options' => ['Load', 'Leak Test', 'NDT', 'Hydro']],
             ],
