@@ -126,6 +126,11 @@
     outline: none;
 }
 
+header {
+    position: relative;
+    z-index: 50;
+}
+
 /* Reduced motion preference: smooth entrance only when motion is preferred */
 @media (prefers-reduced-motion: no-preference) {
     @view-transition {
