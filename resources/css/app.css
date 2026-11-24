@@ -126,9 +126,13 @@
     outline: none;
 }
 
-header {
+header:has(.mobile-account-details) {
     position: relative;
     z-index: 50;
+}
+
+header:has(.mobile-account-details[open]) {
+    view-transition-name: none;
 }
 
 /* Reduced motion preference: smooth entrance only when motion is preferred */

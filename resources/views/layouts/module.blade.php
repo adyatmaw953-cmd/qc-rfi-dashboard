@@ -14,7 +14,7 @@
     <div class="min-h-screen md:flex">
         <x-module-sidebar :active="$active" />
         <main class="min-w-0 flex-1 px-4 py-5 pb-32 md:px-10 md:py-8">
-            <header class="mb-8 flex items-center justify-between">
+            <header class="relative z-50 mb-8 flex items-center justify-between">
                 <div>
                     @if (isset($backUrl))
                         <div class="mb-1">
@@ -138,6 +138,9 @@
             </header>
 
             <style>
+                header:has(.mobile-account-details[open]) {
+                    view-transition-name: none;
+                }
                 details.mobile-account-details[open] > summary::before {
                     content: "";
                     position: fixed;
