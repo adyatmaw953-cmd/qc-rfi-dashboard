@@ -119,6 +119,9 @@
                                         </svg>
                                         <span>Ganti Password</span>
                                     </a>
+
+                                    <div class="mt-2.5 border-t border-line" role="separator" aria-hidden="true"></div>
+
                                     <form method="POST" action="{{ route('logout') }}">
                                         @csrf
                                         <button type="submit" class="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-[12px] border border-[#B4470F] text-[15px] font-semibold text-[#8F3F08] bg-white transition hover:bg-[#FCE8D8]/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">
@@ -170,5 +173,9 @@
             @yield('content')
         </main>
     </div>
+
+    @auth
+        <x-logout-dialog />
+    @endauth
 </body>
 </html>

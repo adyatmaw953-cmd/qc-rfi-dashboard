@@ -173,4 +173,19 @@ class AuthenticationTest extends TestCase
 
         $this->assertGuest();
     }
+
+    public function test_authenticated_page_renders_logout_confirmation_dialog_and_post_form(): void
+    {
+        $user = User::factory()->create(['role' => 'qc_qa']);
+
+        $response = $this->actingAs($user)->get(route('dashboard'));
+
+        $response->assertOk();
+        $response->assertSee('Keluar dari akun?');
+        $response->assertSee('Anda akan keluar dari aplikasi.');
+        $response->assertSee('Batal');
+        $response->assertSee('Ya, Log Out');
+        $response->assertSee('action="'.route('logout').'"', false);
+        $response->assertSee('name="_token"', false);
+    }
 }
