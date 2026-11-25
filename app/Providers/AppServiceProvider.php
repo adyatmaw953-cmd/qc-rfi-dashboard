@@ -2,9 +2,12 @@
 
 namespace App\Providers;
 
+use App\Contracts\MaterialInClient;
 use App\Contracts\VsmClient;
 use App\Models\Ncr;
 use App\Policies\NcrPolicy;
+use App\Services\MaterialIn\FakeMaterialInClient;
+use App\Services\MaterialIn\HttpMaterialInClient;
 use App\Services\Vsm\FakeVsmClient;
 use App\Services\Vsm\HttpVsmClient;
 use Illuminate\Contracts\Foundation\Application;
@@ -27,6 +30,14 @@ class AppServiceProvider extends ServiceProvider
                 'fake' => $app->make(FakeVsmClient::class),
                 'http' => $app->make(HttpVsmClient::class),
                 default => throw new InvalidArgumentException('Unsupported VSM driver.'),
+            };
+        });
+
+        $this->app->bind(MaterialInClient::class, function (Application $app): MaterialInClient {
+            return match ($app['config']->get('material_in.driver')) {
+                'fake' => $app->make(FakeMaterialInClient::class),
+                'http' => $app->make(HttpMaterialInClient::class),
+                default => throw new InvalidArgumentException('Unsupported MaterialIn driver.'),
             };
         });
     }

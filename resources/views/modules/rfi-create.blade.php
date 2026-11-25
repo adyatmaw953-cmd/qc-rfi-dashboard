@@ -387,11 +387,19 @@
                                     id="{{ $inputId }}"
                                     name="{{ $fieldName }}"
                                     type="{{ $field['type'] ?? 'text' }}"
+                                    @if ($field['name'] === 'vendor')
+                                        list="{{ $inputId }}_list"
+                                        autocomplete="off"
+                                        placeholder="Ketik nama vendor..."
+                                    @endif
                                     @required($field['required'] ?? false)
                                     value="{{ $currentVal }}"
                                     class="form-control {{ $err ? 'form-control-invalid' : '' }}"
                                     @if ($err) aria-invalid="true" aria-describedby="{{ $inputId }}-error" @endif
                                 >
+                                @if ($field['name'] === 'vendor')
+                                    <datalist id="{{ $inputId }}_list"></datalist>
+                                @endif
                             @endif
                         </x-form-field>
                     @endforeach
@@ -687,5 +695,47 @@
             const fieldName = id.replace('details_', 'details[').concat(']');
             initMultiSelect(id, fieldName);
         });
+
+        // Vendor / Supplier autocomplete via API
+        const vendorInput = document.getElementById('details_vendor');
+        const vendorList = document.getElementById('details_vendor_list');
+
+        if (vendorInput && vendorList) {
+            let debounceTimer = null;
+            const searchUrl = @json(route('suppliers.search'));
+
+            function fetchSuppliers(query = '') {
+                fetch(`${searchUrl}?search=${encodeURIComponent(query)}`, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(res => res.ok ? res.json() : [])
+                .then(suppliers => {
+                    if (!Array.isArray(suppliers)) return;
+                    vendorList.innerHTML = '';
+                    suppliers.forEach(name => {
+                        const option = document.createElement('option');
+                        option.value = name;
+                        vendorList.appendChild(option);
+                    });
+                })
+                .catch(() => {});
+            }
+
+            vendorInput.addEventListener('focus', () => {
+                if (!vendorList.children.length) {
+                    fetchSuppliers(vendorInput.value.trim());
+                }
+            });
+
+            vendorInput.addEventListener('input', () => {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    fetchSuppliers(vendorInput.value.trim());
+                }, 300);
+            });
+        }
     </script>
 @endsection

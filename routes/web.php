@@ -8,6 +8,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\QcFindingController;
 use App\Http\Controllers\RfiController;
+use App\Http\Controllers\SupplierSearchController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -35,6 +36,8 @@ Route::middleware(['auth', 'role:admin|production|qc_qa|warehouse|ppic'])->group
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::post('/notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
     Route::post('/notifications/{id}/read', [NotificationController::class, 'read'])->name('notifications.read');
+
+    Route::get('/suppliers/search', SupplierSearchController::class)->name('suppliers.search');
 
     Route::get('/rfi', [RfiController::class, 'index'])
         ->middleware('module:rfi')
