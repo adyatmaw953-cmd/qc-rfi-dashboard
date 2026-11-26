@@ -53,37 +53,27 @@
                     $selectedProjectId = old('project_id', $isEdit ? $rfi->project_id : (request('project') ?: ''));
                     $selectedProject = $projects->firstWhere('id', (int) $selectedProjectId);
                     $initialCustomer = $selectedProject?->customer ?? '';
+                    $projectDisplayText = $selectedProject
+                        ? ($selectedProject->project_code . ' — ' . $selectedProject->project_name)
+                        : '';
+                    $projectBadgeF = $projects->count() . ' Project';
                 @endphp
                 <div class="flex flex-col gap-1.5">
-                    <label for="project_select" class="text-[14px] font-semibold text-ink">
+                    <label for="project_select_trigger" class="text-[14px] font-semibold text-ink">
                         Project<span class="text-[#B4470F]"> *</span>
                     </label>
-                    <div class="relative">
-                        <select
-                            id="project_select"
-                            name="project_id"
-                            required
-                            class="form-control appearance-none pr-10 {{ $errors->has('project_id') ? 'form-control-invalid' : '' }}"
-                            @if ($errors->has('project_id')) aria-invalid="true" @endif
-                        >
-                            <option value="" data-customer="">Pilih project</option>
-                            @foreach ($projects as $project)
-                                <option value="{{ $project->id }}"
-                                        data-customer="{{ $project->customer ?? '' }}"
-                                        @selected((string) $selectedProjectId === (string) $project->id)>
-                                    {{ $project->project_code }} — {{ $project->project_name }}
-                                </option>
-                            @endforeach
-                        </select>
-                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3.5 text-muted">
-                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="m6 9 6 6 6-6"></path>
-                            </svg>
-                        </div>
-                    </div>
-                    @error('project_id')
-                        <div class="text-[13px] font-medium text-[#8F3F08]" role="alert">{{ $message }}</div>
-                    @enderror
+                    <x-searchable-dropdown
+                        id="project_select"
+                        name="project_id"
+                        :label="'Pilih project'"
+                        :value="(string) ($selectedProjectId ?: '')"
+                        :displayText="$projectDisplayText"
+                        placeholder="Cari project..."
+                        :required="true"
+                        :badge-count="$projectBadgeF"
+                        :error="$errors->first('project_id')"
+                        data-sdd-type="static"
+                    />
                 </div>
 
                 {{-- 2. Tanggal Inspeksi --}}
@@ -249,29 +239,40 @@
                         $span = ($field['type'] === 'textarea');
                         $currentVal = old($fieldName, $isEdit ? ($fieldName === 'date_inspect' ? (! empty($rfi->details['_draft_no_date']) ? '' : $rfi->date_inspect?->format('Y-m-d')) : $rfi->$fieldName) : null);
                     @endphp
-                    <x-form-field
-                        :id="$fieldName"
-                        :label="$field['label']"
-                        :required="(bool) $field['required']"
-                        :error="$err"
-                        :span="$span"
-                    >
-                        @if ($field['type'] === 'project')
-                            <select
-                                id="{{ $fieldName }}"
-                                name="{{ $fieldName }}"
-                                required
-                                class="form-control {{ $err ? 'form-control-invalid' : '' }}"
-                                @if ($err) aria-invalid="true" aria-describedby="{{ $fieldName }}-error" @endif
-                            >
-                                <option value="">Pilih project</option>
-                                @foreach ($projects as $project)
-                                    <option value="{{ $project->id }}" @selected((string) $currentVal === (string) $project->id)>
-                                        {{ $project->project_code }} — {{ $project->project_name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        @elseif ($field['type'] === 'textarea')
+
+                    @if ($field['type'] === 'project')
+                        @php
+                            $selectedProject = $projects->firstWhere('id', (int) $currentVal);
+                            $projectDisplayText = $selectedProject
+                                ? ($selectedProject->project_code . ' — ' . $selectedProject->project_name)
+                                : '';
+                            $projectBadge = $projects->count() . ' Project';
+                        @endphp
+                        <div class="flex flex-col gap-[6px]">
+                            <label for="project_id_trigger" class="text-[14px] font-semibold text-ink">
+                                {{ $field['label'] }}<span aria-hidden="true" class="text-alert"> *</span>
+                            </label>
+                            <x-searchable-dropdown
+                                id="project_id"
+                                name="project_id"
+                                :label="'Pilih project'"
+                                :value="(string) ($currentVal ?? '')"
+                                :displayText="$projectDisplayText"
+                                placeholder="Cari project..."
+                                :required="true"
+                                :badge-count="$projectBadge"
+                                :error="$err"
+                                data-sdd-type="static"
+                            />
+                        </div>
+                    @elseif ($field['type'] === 'textarea')
+                        <x-form-field
+                            :id="$fieldName"
+                            :label="$field['label']"
+                            :required="(bool) $field['required']"
+                            :error="$err"
+                            :span="$span"
+                        >
                             <textarea
                                 id="{{ $fieldName }}"
                                 name="{{ $fieldName }}"
@@ -279,7 +280,15 @@
                                 class="form-control {{ $err ? 'form-control-invalid' : '' }}"
                                 @if ($err) aria-invalid="true" aria-describedby="{{ $fieldName }}-error" @endif
                             >{{ $currentVal }}</textarea>
-                        @else
+                        </x-form-field>
+                    @else
+                        <x-form-field
+                            :id="$fieldName"
+                            :label="$field['label']"
+                            :required="(bool) $field['required']"
+                            :error="$err"
+                            :span="$span"
+                        >
                             <input
                                 id="{{ $fieldName }}"
                                 name="{{ $fieldName }}"
@@ -289,8 +298,8 @@
                                 class="form-control {{ $err ? 'form-control-invalid' : '' }}"
                                 @if ($err) aria-invalid="true" aria-describedby="{{ $fieldName }}-error" @endif
                             >
-                        @endif
-                    </x-form-field>
+                        </x-form-field>
+                    @endif
                 @endforeach
 
                 @if (! empty($category['general_fields']))
@@ -309,18 +318,48 @@
                             $showIfValue = $field['show_if']['value'] ?? null;
                             $showIfClass = $showIfName ? 'hidden' : null;
                         @endphp
-                        <x-form-field
-                            :id="$inputId"
-                            :label="$field['label']"
-                            :required="$required"
-                            :error="$err"
-                            :hint="$hint"
-                            :span="$span"
-                            :class="$showIfClass"
-                            :data-show-if-name="$showIfName"
-                            :data-show-if-value="$showIfValue"
-                        >
-                            @if (($field['type'] ?? 'text') === 'select')
+
+                        @if (in_array($field['name'], ['vendor', 'po_no', 'bom_no'], true))
+                            {{-- Searchable dropdown panel fields --}}
+                            @php
+                                $sddType  = $field['name'] === 'vendor' ? 'api-vendor' : 'vsm-material';
+                                $sddLabel = match($field['name']) {
+                                    'vendor' => 'Cari vendor / supplier...',
+                                    'po_no'  => 'Cari PO No...',
+                                    default  => 'Cari BOM No...',
+                                };
+                            @endphp
+                            <div class="flex flex-col gap-[6px] {{ $showIfClass }}"
+                                 @if($showIfName) data-show-if-name="{{ $showIfName }}" data-show-if-value="{{ $showIfValue }}" @endif>
+                                <label for="{{ $inputId }}_trigger" class="text-[14px] font-semibold text-ink">
+                                    {{ $field['label'] }}@if($required)<span aria-hidden="true" class="text-alert"> *</span>@endif
+                                </label>
+                                <x-searchable-dropdown
+                                    :id="$inputId"
+                                    :name="$fieldName"
+                                    :label="'Pilih ' . strtolower($field['label'])"
+                                    :value="(string) ($currentVal ?? '')"
+                                    :placeholder="$sddLabel"
+                                    :required="$required"
+                                    :error="$err"
+                                    :data-sdd-type="$sddType"
+                                />
+                                @if($hint)
+                                    <p class="text-[12px] text-muted">{{ $hint }}</p>
+                                @endif
+                            </div>
+                        @elseif (($field['type'] ?? 'text') === 'select')
+                            <x-form-field
+                                :id="$inputId"
+                                :label="$field['label']"
+                                :required="$required"
+                                :error="$err"
+                                :hint="$hint"
+                                :span="$span"
+                                :class="$showIfClass"
+                                :data-show-if-name="$showIfName"
+                                :data-show-if-value="$showIfValue"
+                            >
                                 <select
                                     id="{{ $inputId }}"
                                     name="{{ $fieldName }}"
@@ -337,15 +376,27 @@
                                         <option value="{{ $option }}" @selected((string) $currentVal === (string) $option)>{{ $option }}</option>
                                     @endforeach
                                 </select>
-                            @elseif (($field['type'] ?? 'text') === 'multi_select')
-                                @php
-                                    $selectedItems = old($errorKey, $isEdit ? data_get($rfi->details, $field['name'], []) : []);
-                                    if (is_string($selectedItems)) {
-                                        $selectedItems = array_values(array_filter(array_map('trim', explode(',', $selectedItems))));
-                                    } elseif (! is_array($selectedItems)) {
-                                        $selectedItems = [];
-                                    }
-                                @endphp
+                            </x-form-field>
+                        @elseif (($field['type'] ?? 'text') === 'multi_select')
+                            @php
+                                $selectedItems = old($errorKey, $isEdit ? data_get($rfi->details, $field['name'], []) : []);
+                                if (is_string($selectedItems)) {
+                                    $selectedItems = array_values(array_filter(array_map('trim', explode(',', $selectedItems))));
+                                } elseif (! is_array($selectedItems)) {
+                                    $selectedItems = [];
+                                }
+                            @endphp
+                            <x-form-field
+                                :id="$inputId"
+                                :label="$field['label']"
+                                :required="$required"
+                                :error="$err"
+                                :hint="$hint"
+                                :span="$span"
+                                :class="$showIfClass"
+                                :data-show-if-name="$showIfName"
+                                :data-show-if-value="$showIfValue"
+                            >
                                 <div id="{{ $inputId }}_wrapper" class="space-y-2">
                                     <div class="flex flex-wrap sm:flex-nowrap gap-2">
                                         <select id="{{ $inputId }}_select" class="form-control flex-1 min-w-[180px]">
@@ -373,7 +424,19 @@
                                         <span id="{{ $inputId }}_empty_hint" class="text-[12px] text-muted italic {{ !empty($selectedItems) ? 'hidden' : '' }}">Belum ada jenis pengujian ditambahkan</span>
                                     </div>
                                 </div>
-                            @elseif (($field['type'] ?? 'text') === 'textarea')
+                            </x-form-field>
+                        @elseif (($field['type'] ?? 'text') === 'textarea')
+                            <x-form-field
+                                :id="$inputId"
+                                :label="$field['label']"
+                                :required="$required"
+                                :error="$err"
+                                :hint="$hint"
+                                :span="true"
+                                :class="$showIfClass"
+                                :data-show-if-name="$showIfName"
+                                :data-show-if-value="$showIfValue"
+                            >
                                 <textarea
                                     id="{{ $inputId }}"
                                     name="{{ $fieldName }}"
@@ -382,26 +445,30 @@
                                     class="form-control {{ $err ? 'form-control-invalid' : '' }}"
                                     @if ($err) aria-invalid="true" aria-describedby="{{ $inputId }}-error" @endif
                                 >{{ $currentVal }}</textarea>
-                            @else
+                            </x-form-field>
+                        @else
+                            <x-form-field
+                                :id="$inputId"
+                                :label="$field['label']"
+                                :required="$required"
+                                :error="$err"
+                                :hint="$hint"
+                                :span="$span"
+                                :class="$showIfClass"
+                                :data-show-if-name="$showIfName"
+                                :data-show-if-value="$showIfValue"
+                            >
                                 <input
                                     id="{{ $inputId }}"
                                     name="{{ $fieldName }}"
                                     type="{{ $field['type'] ?? 'text' }}"
-                                    @if ($field['name'] === 'vendor')
-                                        list="{{ $inputId }}_list"
-                                        autocomplete="off"
-                                        placeholder="Ketik nama vendor..."
-                                    @endif
                                     @required($field['required'] ?? false)
                                     value="{{ $currentVal }}"
                                     class="form-control {{ $err ? 'form-control-invalid' : '' }}"
                                     @if ($err) aria-invalid="true" aria-describedby="{{ $inputId }}-error" @endif
                                 >
-                                @if ($field['name'] === 'vendor')
-                                    <datalist id="{{ $inputId }}_list"></datalist>
-                                @endif
-                            @endif
-                        </x-form-field>
+                            </x-form-field>
+                        @endif
                     @endforeach
                 @endif
 
@@ -555,16 +622,24 @@
 
     <script>
         // Category F interaction
-        const projectSelect = document.getElementById('project_select');
-        const customerDisplay = document.getElementById('customer_display');
-        function updateCustomer() {
-            if (!projectSelect || !customerDisplay) return;
-            const opt = projectSelect.options[projectSelect.selectedIndex];
-            const cust = opt?.getAttribute('data-customer');
-            customerDisplay.textContent = cust && cust.trim() ? cust : '—';
-        }
-        projectSelect?.addEventListener('change', updateCustomer);
-        updateCustomer();
+        (function() {
+            const customerDisplay = document.getElementById('customer_display');
+            const projectHiddenF = document.getElementById('project_select');
+
+            // Build lookup map from server-rendered project data
+            const projectMapF = {};
+            @foreach ($projects as $p)
+            projectMapF['{{ $p->id }}'] = @json($p->customer ?? '');
+            @endforeach
+
+            function updateCustomer() {
+                if (!projectHiddenF || !customerDisplay) return;
+                const cust = projectMapF[projectHiddenF.value] || '';
+                customerDisplay.textContent = cust && cust.trim() ? cust : '—';
+            }
+            projectHiddenF?.addEventListener('change', updateCustomer);
+            updateCustomer();
+        })();
 
         const radioCards = document.querySelectorAll('.jenis-radio-card');
         const additionalContainer = document.getElementById('additional_input_container');
@@ -697,45 +772,293 @@
         });
 
         // Vendor / Supplier autocomplete via API
-        const vendorInput = document.getElementById('details_vendor');
-        const vendorList = document.getElementById('details_vendor_list');
+        // [replaced by searchable-dropdown component — see sdd init below]
 
-        if (vendorInput && vendorList) {
-            let debounceTimer = null;
-            const searchUrl = @json(route('suppliers.search'));
+        // =========================================================
+        // Searchable Dropdown (SDD) — shared controller
+        // Handles: project_id (static list), details_vendor (api),
+        //          details_po_no / details_bom_no (vsm-material)
+        // =========================================================
+        (function () {
+            const supplierUrl = @json(route('suppliers.search'));
+            const materialsBaseUrl = @json(url('/projects'));
 
-            function fetchSuppliers(query = '') {
-                fetch(`${searchUrl}?search=${encodeURIComponent(query)}`, {
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
+            // Static items for project dropdown
+            const projectItems = @json($projects->map(fn($p) => [
+                'value' => (string) $p->id,
+                'label' => $p->project_code . ' — ' . $p->project_name,
+            ])->values());
+
+            // VSM material cache keyed by projectId
+            const vsmCache = {};
+            let vsmLoading = false;
+
+            function renderItems(listEl, items, query, emptyMsg) {
+                const q = (query || '').trim().toLowerCase();
+                const filtered = q ? items.filter(it => it.label.toLowerCase().includes(q)) : items;
+                listEl.innerHTML = '';
+
+                if (!filtered.length) {
+                    listEl.innerHTML = `<li class="px-4 py-3 text-[13px] text-muted italic">${emptyMsg || 'Tidak ada hasil'}</li>`;
+                    return;
+                }
+
+                filtered.forEach(item => {
+                    const li = document.createElement('li');
+                    li.setAttribute('role', 'option');
+                    li.setAttribute('data-value', item.value);
+                    li.setAttribute('data-label', item.label);
+
+                    // Build row: label + optional badge
+                    let inner = `<span class="text-[14px] font-medium text-ink leading-snug">${escHtml(item.label)}</span>`;
+                    if (item.badge) {
+                        inner += `<span class="shrink-0 rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand">${escHtml(item.badge)}</span>`;
                     }
-                })
-                .then(res => res.ok ? res.json() : [])
-                .then(suppliers => {
-                    if (!Array.isArray(suppliers)) return;
-                    vendorList.innerHTML = '';
-                    suppliers.forEach(name => {
-                        const option = document.createElement('option');
-                        option.value = name;
-                        vendorList.appendChild(option);
-                    });
-                })
-                .catch(() => {});
+                    li.innerHTML = `<div class="flex items-center justify-between gap-2 px-4 py-3 cursor-pointer hover:bg-paper transition">${inner}</div>`;
+                    listEl.appendChild(li);
+                });
             }
 
-            vendorInput.addEventListener('focus', () => {
-                if (!vendorList.children.length) {
-                    fetchSuppliers(vendorInput.value.trim());
-                }
-            });
+            function escHtml(str) {
+                return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            }
 
-            vendorInput.addEventListener('input', () => {
-                clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(() => {
-                    fetchSuppliers(vendorInput.value.trim());
-                }, 300);
-            });
-        }
+            function openPanel(root, trigger) {
+                const panel = root.querySelector('[role="listbox"]');
+                if (!panel) return;
+                panel.classList.remove('hidden');
+                trigger.setAttribute('aria-expanded', 'true');
+                // Rotate chevron
+                const chevron = trigger.querySelector('svg');
+                if (chevron) chevron.style.transform = 'rotate(180deg)';
+                const searchInput = panel.querySelector('input[type="text"]');
+                if (searchInput) setTimeout(() => searchInput.focus(), 30);
+            }
+
+            function closePanel(root, trigger) {
+                const panel = root.querySelector('[role="listbox"]');
+                if (!panel) return;
+                panel.classList.add('hidden');
+                trigger.setAttribute('aria-expanded', 'false');
+                const chevron = trigger.querySelector('svg');
+                if (chevron) chevron.style.transform = '';
+            }
+
+            function selectItem(root, trigger, hiddenInput, displayEl, value, label) {
+                hiddenInput.value = value;
+                displayEl.textContent = label || value;
+                displayEl.classList.remove('text-muted');
+                displayEl.classList.add('text-ink');
+                closePanel(root, trigger);
+                // Dispatch change for downstream listeners (PO/BOM reload)
+                hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            function clearItem(root, trigger, hiddenInput, displayEl, placeholder) {
+                hiddenInput.value = '';
+                displayEl.textContent = placeholder;
+                displayEl.classList.remove('text-ink');
+                displayEl.classList.add('text-muted');
+                closePanel(root, trigger);
+                hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            function initSDD(rootEl) {
+                const id = rootEl.getAttribute('data-sdd-root');
+                const type = rootEl.querySelector('[data-sdd-type]')?.getAttribute('data-sdd-type') || 'static';
+                const trigger = rootEl.querySelector(`#${id}_trigger`);
+                const panel = rootEl.querySelector(`#${id}_panel`);
+                const searchInput = rootEl.querySelector(`#${id}_search`);
+                const listEl = rootEl.querySelector(`#${id}_list`);
+                const hiddenInput = rootEl.querySelector(`#${id}`);
+                const displayEl = rootEl.querySelector(`#${id}_display`);
+                const badgeEl = rootEl.querySelector(`#${id}_badge`);
+                const clearBtn = rootEl.querySelector('[data-sdd-clear]');
+                const placeholder = trigger?.querySelector('span')?.textContent?.trim() || '';
+
+                if (!trigger || !panel || !listEl || !hiddenInput) return;
+
+                let items = [];
+
+                // ---- Load data for a given type ----
+                async function loadItems(query) {
+                    if (type === 'static') {
+                        // Project list from server-rendered PHP
+                        items = projectItems;
+                        renderItems(listEl, items, query, 'Tidak ada project');
+                        if (badgeEl) badgeEl.textContent = items.length + ' Project';
+
+                    } else if (type === 'api-vendor') {
+                        listEl.innerHTML = '<li class="px-4 py-3 text-[13px] text-muted italic">Memuat...</li>';
+                        try {
+                            const res = await fetch(`${supplierUrl}?search=${encodeURIComponent(query || '')}`, {
+                                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+                            });
+                            const data = res.ok ? await res.json() : [];
+                            items = Array.isArray(data) ? data.map(s => ({ value: s, label: s })) : [];
+                            renderItems(listEl, items, '', 'Tidak ada vendor');
+                            if (badgeEl) badgeEl.textContent = items.length + ' Vendor';
+                        } catch {
+                            listEl.innerHTML = '<li class="px-4 py-3 text-[13px] text-muted italic">Gagal memuat data</li>';
+                        }
+
+                    } else if (type === 'vsm-material') {
+                        // Will be populated when project changes — see project listener below
+                        renderItems(listEl, items, query, 'Pilih project terlebih dahulu');
+                    }
+                }
+
+                // ---- Trigger open/close ----
+                trigger.addEventListener('click', () => {
+                    const isOpen = panel && !panel.classList.contains('hidden');
+                    if (isOpen) {
+                        closePanel(rootEl, trigger);
+                        return;
+                    }
+                    // Close all other panels
+                    document.querySelectorAll('[data-sdd-root]').forEach(r => {
+                        if (r !== rootEl) {
+                            const t = r.querySelector(`#${r.getAttribute('data-sdd-root')}_trigger`);
+                            if (t) closePanel(r, t);
+                        }
+                    });
+                    openPanel(rootEl, trigger);
+                    if (!items.length || type === 'api-vendor') {
+                        loadItems('');
+                    } else {
+                        renderItems(listEl, items, '', 'Tidak ada hasil');
+                    }
+                });
+
+                // ---- Search ----
+                let debounce = null;
+                searchInput?.addEventListener('input', () => {
+                    clearTimeout(debounce);
+                    const q = searchInput.value;
+                    if (type === 'api-vendor') {
+                        debounce = setTimeout(() => loadItems(q), 300);
+                    } else {
+                        renderItems(listEl, items, q, 'Tidak ada hasil');
+                    }
+                });
+
+                // ---- Select item from list ----
+                listEl.addEventListener('click', (e) => {
+                    const li = e.target.closest('li[data-value]');
+                    if (!li) return;
+                    selectItem(rootEl, trigger, hiddenInput, displayEl, li.dataset.value, li.dataset.label);
+                });
+
+                // ---- Clear ----
+                clearBtn?.addEventListener('click', () => clearItem(rootEl, trigger, hiddenInput, displayEl, placeholder));
+
+                // ---- Close on outside click ----
+                document.addEventListener('click', (e) => {
+                    if (!rootEl.contains(e.target)) closePanel(rootEl, trigger);
+                }, true);
+
+                // ---- Keyboard close ----
+                panel?.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') { closePanel(rootEl, trigger); trigger.focus(); }
+                });
+
+                // ---- Expose update API for external callers (VSM PO/BOM) ----
+                rootEl._sddSetItems = function(newItems) {
+                    items = newItems;
+                    if (!panel.classList.contains('hidden')) {
+                        renderItems(listEl, items, searchInput?.value || '', 'Tidak ada hasil');
+                    }
+                    if (badgeEl) badgeEl.textContent = items.length;
+                };
+
+                // Initial static load for project
+                if (type === 'static') loadItems('');
+            }
+
+            // Init all SDD roots
+            document.querySelectorAll('[data-sdd-root]').forEach(initSDD);
+
+            // ---- Project → PO/BOM reload ----
+            const projectHidden = document.getElementById('project_id');
+            const poRoot   = document.querySelector('[data-sdd-root="details_po_no"]');
+            const bomRoot  = document.querySelector('[data-sdd-root="details_bom_no"]');
+
+            async function reloadVsmMaterials(projectId) {
+                // Clear both
+                [poRoot, bomRoot].forEach(r => {
+                    if (!r) return;
+                    // Clear selected value
+                    const hid = r.querySelector(`#${r.getAttribute('data-sdd-root')}`);
+                    const disp = r.querySelector(`#${r.getAttribute('data-sdd-root')}_display`);
+                    if (hid && disp) {
+                        hid.value = '';
+                        const lbl = r.querySelector(`#${r.getAttribute('data-sdd-root')}_trigger span`)?.dataset?.placeholder || '';
+                        disp.textContent = lbl || 'Pilih...';
+                        disp.classList.add('text-muted');
+                        disp.classList.remove('text-ink');
+                    }
+                    if (r._sddSetItems) r._sddSetItems([]);
+                    const listEl = r.querySelector(`#${r.getAttribute('data-sdd-root')}_list`);
+                    if (listEl) listEl.innerHTML = '<li class="px-4 py-3 text-[13px] text-muted italic">Memuat...</li>';
+                });
+
+                if (!projectId) {
+                    [poRoot, bomRoot].forEach(r => {
+                        if (!r) return;
+                        const listEl = r.querySelector(`#${r.getAttribute('data-sdd-root')}_list`);
+                        if (listEl) listEl.innerHTML = '<li class="px-4 py-3 text-[13px] text-muted italic">Pilih project terlebih dahulu</li>';
+                        if (r._sddSetItems) r._sddSetItems([]);
+                    });
+                    return;
+                }
+
+                try {
+                    const cached = vsmCache[projectId];
+                    const data = cached || await fetch(`${materialsBaseUrl}/${encodeURIComponent(projectId)}/materials`, {
+                        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+                    }).then(r => r.ok ? r.json() : null);
+
+                    if (data) vsmCache[projectId] = data;
+
+                    if (poRoot && poRoot._sddSetItems) {
+                        const poItems = (data?.po_numbers || []).map(v => ({ value: v, label: v }));
+                        poRoot._sddSetItems(poItems);
+                        // Auto-fill if single result and field is empty
+                        const poHid = poRoot.querySelector('#details_po_no');
+                        const poDisp = poRoot.querySelector('#details_po_no_display');
+                        if (poHid && poDisp && !poHid.value && poItems.length === 1) {
+                            poHid.value = poItems[0].value;
+                            poDisp.textContent = poItems[0].label;
+                            poDisp.classList.remove('text-muted');
+                            poDisp.classList.add('text-ink');
+                        }
+                    }
+
+                    if (bomRoot && bomRoot._sddSetItems) {
+                        const bomItems = (data?.bom_numbers || []).map(v => ({ value: v, label: v }));
+                        bomRoot._sddSetItems(bomItems);
+                        const bomHid = bomRoot.querySelector('#details_bom_no');
+                        const bomDisp = bomRoot.querySelector('#details_bom_no_display');
+                        if (bomHid && bomDisp && !bomHid.value && bomItems.length === 1) {
+                            bomHid.value = bomItems[0].value;
+                            bomDisp.textContent = bomItems[0].label;
+                            bomDisp.classList.remove('text-muted');
+                            bomDisp.classList.add('text-ink');
+                        }
+                    }
+                } catch {
+                    [poRoot, bomRoot].forEach(r => {
+                        if (!r) return;
+                        const listEl = r.querySelector(`#${r.getAttribute('data-sdd-root')}_list`);
+                        if (listEl) listEl.innerHTML = '<li class="px-4 py-3 text-[13px] text-muted italic">Gagal memuat data VSM</li>';
+                    });
+                }
+            }
+
+            if (projectHidden) {
+                projectHidden.addEventListener('change', () => reloadVsmMaterials(projectHidden.value));
+                if (projectHidden.value) reloadVsmMaterials(projectHidden.value);
+            }
+        })();
     </script>
 @endsection

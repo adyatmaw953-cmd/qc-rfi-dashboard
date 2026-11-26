@@ -1,10 +1,10 @@
 <dialog
     id="logout-dialog"
-    class="w-[calc(100%-2rem)] max-w-[380px] rounded-[24px] border border-line bg-white p-6 sm:p-7 shadow-2xl backdrop:bg-[#14201A]/45 backdrop:backdrop-blur-xs"
+    class="backdrop:bg-[#14201A]/45 backdrop:backdrop-blur-xs"
     aria-labelledby="logout-dialog-title"
     aria-describedby="logout-dialog-desc"
 >
-    <div class="flex flex-col items-center text-center">
+    <div class="flex flex-col items-center text-center w-[calc(100vw-2rem)] max-w-[380px] rounded-[24px] border border-line bg-white p-6 sm:p-7 shadow-2xl">
         {{-- Icon Log Out --}}
         <div aria-hidden="true" class="flex h-12 w-12 min-h-[48px] min-w-[48px] shrink-0 aspect-square items-center justify-center rounded-full bg-[#FCE8D8] text-[#8F3F08]">
             <svg class="h-6 w-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -45,17 +45,15 @@
 
 <style>
     #logout-dialog {
-        position: fixed !important;
-        top: 50% !important;
-        left: 50% !important;
-        transform: translate(-50%, -50%) !important;
-        margin: 0 !important;
+        margin: auto;
+        border: none;
+        padding: 0;
+        background: transparent;
+        max-height: 100vh;
+        overflow: visible;
     }
     #logout-dialog:not([open]) {
         display: none !important;
-    }
-    #logout-dialog[open] {
-        display: block !important;
     }
     #logout-dialog::backdrop {
         background-color: rgba(20, 32, 26, 0.45);

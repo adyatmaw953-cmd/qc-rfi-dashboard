@@ -62,7 +62,7 @@ class SyncVsmProjects extends Command
                 throw new UnexpectedValueException('Each VSM project must be an object.');
             }
 
-            $externalId = $project['external_id'] ?? null;
+            $externalId = $project['external_id'] ?? $project['id'] ?? null;
             if ((! is_int($externalId) && ! (is_string($externalId) && ctype_digit($externalId)))
                 || (int) $externalId < 0) {
                 throw new UnexpectedValueException('Each VSM project must have a numeric external_id.');

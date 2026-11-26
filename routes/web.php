@@ -6,6 +6,7 @@ use App\Http\Controllers\ModuleController;
 use App\Http\Controllers\NcrController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PasswordController;
+use App\Http\Controllers\ProjectMaterialController;
 use App\Http\Controllers\QcFindingController;
 use App\Http\Controllers\RfiController;
 use App\Http\Controllers\SupplierSearchController;
@@ -38,6 +39,7 @@ Route::middleware(['auth', 'role:admin|production|qc_qa|warehouse|ppic'])->group
     Route::post('/notifications/{id}/read', [NotificationController::class, 'read'])->name('notifications.read');
 
     Route::get('/suppliers/search', SupplierSearchController::class)->name('suppliers.search');
+    Route::get('/projects/{project}/materials', ProjectMaterialController::class)->name('projects.materials');
 
     Route::get('/rfi', [RfiController::class, 'index'])
         ->middleware('module:rfi')

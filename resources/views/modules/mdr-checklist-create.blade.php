@@ -27,30 +27,36 @@
 
                 <div class="mt-5 grid grid-cols-1 min-[820px]:grid-cols-2 gap-5">
                     {{-- Project --}}
+                    @php
+                        $selectedMdrProjectId = old('project_id', '');
+                        $selectedMdrProject = $projects->firstWhere('id', (int) $selectedMdrProjectId);
+                        $mdrProjectDisplay = $selectedMdrProject
+                            ? (($selectedMdrProject->project_code ? $selectedMdrProject->project_code . ' — ' : '') . $selectedMdrProject->project_name)
+                            : '';
+                        $mdrProjectBadge = $projects->count() . ' Project';
+                        $mdrProjectErr = $errors->first('project_id');
+                    @endphp
                     <div>
-                        <label for="project-id" class="block text-[14px] font-semibold text-ink">Project <span class="text-[#B4470F]">*</span></label>
-                        <div class="relative mt-2">
-                            <select
-                                id="project-id"
+                        <label for="project_id_trigger" class="block text-[14px] font-semibold text-ink">Project <span class="text-[#B4470F]">*</span></label>
+                        <div class="mt-2">
+                            <x-searchable-dropdown
+                                id="project_id"
                                 name="project_id"
-                                required
-                                @error('project_id') aria-invalid="true" aria-describedby="project_id-error" @enderror
-                                class="w-full min-h-[48px] rounded-[10px] border appearance-none pr-10 pl-3.5 text-[15px] text-ink transition focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand {{ $errors->has('project_id') ? 'border-[1.5px] border-[#B4470F] bg-white' : 'border-[#8C978B] bg-white' }}"
-                            >
-                                <option value="">Pilih project</option>
-                                @foreach ($projects as $project)
-                                    <option value="{{ $project->id }}" data-customer="{{ $project->customer ?? '' }}" @selected((string) old('project_id') === (string) $project->id)>
-                                        {{ $project->project_code ? $project->project_code . ' — ' : '' }}{{ $project->project_name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3.5 text-muted">
-                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m19 9-7 7-7-7"/></svg>
-                            </div>
+                                :label="'Pilih project'"
+                                :value="$selectedMdrProjectId"
+                                :displayText="$mdrProjectDisplay"
+                                placeholder="Cari project..."
+                                :required="true"
+                                :badge-count="$mdrProjectBadge"
+                                :error="$mdrProjectErr"
+                                data-sdd-type="static"
+                            />
                         </div>
-                        @error('project_id')
-                            <p id="project_id-error" role="alert" class="mt-1.5 text-[13px] font-medium text-[#8F3F08]">{{ $message }}</p>
-                        @enderror
+                        <div class="hidden" aria-hidden="true">
+                            @foreach ($projects as $project)
+                                <span data-project-id="{{ $project->id }}" data-customer="{{ $project->customer ?? '' }}"></span>
+                            @endforeach
+                        </div>
                     </div>
 
                     {{-- Customer (Read-only) --}}
@@ -176,14 +182,128 @@
 
     {{-- Script Customer Autofill --}}
     <script>
-        const projectSelect = document.getElementById('project-id');
-        const customerLabel = document.getElementById('project-customer');
+        // SDD init for project_id (static list)
+        (function () {
+            const projectItems = @json($projects->map(fn($p) => [
+                'value' => (string) $p->id,
+                'label' => ($p->project_code ? $p->project_code . ' — ' : '') . $p->project_name,
+            ])->values());
 
-        projectSelect?.addEventListener('change', () => {
-            customerLabel.textContent = projectSelect.selectedOptions[0]?.dataset.customer || '— (pilih project dulu)';
-        });
+            const projectMapMdr = {};
+            @foreach ($projects as $p)
+            projectMapMdr['{{ $p->id }}'] = @json($p->customer ?? '');
+            @endforeach
 
-        projectSelect?.dispatchEvent(new Event('change'));
+            const customerLabel = document.getElementById('project-customer');
+            const projectHiddenMdr = document.getElementById('project_id');
+
+            function updateMdrCustomer() {
+                if (!projectHiddenMdr || !customerLabel) return;
+                const cust = projectMapMdr[projectHiddenMdr.value] || '';
+                customerLabel.textContent = cust && cust.trim() ? cust : '— (pilih project dulu)';
+            }
+            projectHiddenMdr?.addEventListener('change', updateMdrCustomer);
+            updateMdrCustomer();
+
+            function escHtml(str) {
+                return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            }
+
+            function renderItems(listEl, items, query) {
+                const q = (query || '').trim().toLowerCase();
+                const filtered = q ? items.filter(it => it.label.toLowerCase().includes(q)) : items;
+                listEl.innerHTML = '';
+                if (!filtered.length) {
+                    listEl.innerHTML = '<li class="px-4 py-3 text-[13px] text-muted italic">Tidak ada project</li>';
+                    return;
+                }
+                filtered.forEach(item => {
+                    const li = document.createElement('li');
+                    li.setAttribute('role', 'option');
+                    li.setAttribute('data-value', item.value);
+                    li.setAttribute('data-label', item.label);
+                    li.innerHTML = `<div class="flex items-center px-4 py-3 cursor-pointer hover:bg-paper transition"><span class="text-[14px] font-medium text-ink leading-snug">${escHtml(item.label)}</span></div>`;
+                    listEl.appendChild(li);
+                });
+            }
+
+            function openPanel(root, trigger) {
+                const panel = root.querySelector('[role="listbox"]');
+                if (!panel) return;
+                panel.classList.remove('hidden');
+                trigger.setAttribute('aria-expanded', 'true');
+                const chevron = trigger.querySelector('svg');
+                if (chevron) chevron.style.transform = 'rotate(180deg)';
+                const searchInput = panel.querySelector('input[type="text"]');
+                if (searchInput) setTimeout(() => searchInput.focus(), 30);
+            }
+
+            function closePanel(root, trigger) {
+                const panel = root.querySelector('[role="listbox"]');
+                if (!panel) return;
+                panel.classList.add('hidden');
+                trigger.setAttribute('aria-expanded', 'false');
+                const chevron = trigger.querySelector('svg');
+                if (chevron) chevron.style.transform = '';
+            }
+
+            const root = document.querySelector('[data-sdd-root="project_id"]');
+            if (!root) return;
+
+            const id = 'project_id';
+            const trigger = root.querySelector(`#${id}_trigger`);
+            const panel = root.querySelector(`#${id}_panel`);
+            const searchInput = root.querySelector(`#${id}_search`);
+            const listEl = root.querySelector(`#${id}_list`);
+            const hiddenInput = root.querySelector(`#${id}`);
+            const displayEl = root.querySelector(`#${id}_display`);
+            const badgeEl = root.querySelector(`#${id}_badge`);
+            const clearBtn = root.querySelector('[data-sdd-clear]');
+
+            if (!trigger || !listEl || !hiddenInput) return;
+
+            renderItems(listEl, projectItems, '');
+            if (badgeEl) badgeEl.textContent = projectItems.length + ' Project';
+
+            trigger.addEventListener('click', () => {
+                const isOpen = !panel.classList.contains('hidden');
+                if (isOpen) { closePanel(root, trigger); return; }
+                openPanel(root, trigger);
+                renderItems(listEl, projectItems, searchInput?.value || '');
+            });
+
+            searchInput?.addEventListener('input', () => {
+                renderItems(listEl, projectItems, searchInput.value);
+            });
+
+            listEl.addEventListener('click', (e) => {
+                const li = e.target.closest('li[data-value]');
+                if (!li) return;
+                hiddenInput.value = li.dataset.value;
+                displayEl.textContent = li.dataset.label || li.dataset.value;
+                displayEl.classList.remove('text-muted');
+                displayEl.classList.add('text-ink');
+                closePanel(root, trigger);
+                hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+
+            clearBtn?.addEventListener('click', () => {
+                hiddenInput.value = '';
+                displayEl.textContent = 'Pilih project';
+                displayEl.classList.add('text-muted');
+                displayEl.classList.remove('text-ink');
+                closePanel(root, trigger);
+                hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!root.contains(e.target)) closePanel(root, trigger);
+            }, true);
+
+            panel?.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') { closePanel(root, trigger); trigger.focus(); }
+            });
+        })();
 
         // Custom Reports Management
         let customReportIdx = 0;
