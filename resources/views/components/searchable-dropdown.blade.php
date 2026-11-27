@@ -24,6 +24,7 @@
     'badgeCount' => null,
     'error' => null,
     'disabled' => false,
+    'sddType' => 'static',
 ])
 
 @php
@@ -33,9 +34,10 @@
     $listId     = $id . '_list';
     $display    = $displayText ?? $value;
     $hasValue   = $display !== '' && $display !== null;
+    $actualType = $sddType ?: ($attributes->get('data-sdd-type') ?? 'static');
 @endphp
 
-<div class="relative" data-sdd-root="{{ $id }}">
+<div {{ $attributes->merge(['class' => 'relative']) }} data-sdd-root="{{ $id }}" data-sdd-type="{{ $actualType }}">
 
     {{-- Hidden real input submitted with form --}}
     <input
@@ -57,7 +59,7 @@
         @disabled($disabled)
         class="form-control flex w-full items-center justify-between gap-2 text-left {{ $error ? 'form-control-invalid' : '' }} {{ $disabled ? 'opacity-60 pointer-events-none' : '' }}"
     >
-        <span id="{{ $id }}_display" class="truncate {{ $hasValue ? 'text-ink' : 'text-muted' }}">
+        <span id="{{ $id }}_display" data-placeholder="{{ $label }}" class="truncate {{ $hasValue ? 'text-ink' : 'text-muted' }}">
             {{ $hasValue ? $display : $label }}
         </span>
         <svg class="h-4 w-4 shrink-0 text-muted transition-transform duration-150" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -80,9 +82,7 @@
         {{-- Panel header --}}
         <div class="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
             <span class="text-[13px] font-semibold text-ink truncate">{{ $label }}</span>
-            @if($badgeCount)
-                <span id="{{ $id }}_badge" class="shrink-0 rounded-full bg-brand/10 px-2 py-0.5 text-[12px] font-semibold text-brand">{{ $badgeCount }}</span>
-            @endif
+            <span id="{{ $id }}_badge" class="shrink-0 rounded-full bg-brand/10 px-2 py-0.5 text-[12px] font-semibold text-brand {{ $badgeCount ? '' : 'hidden' }}">{{ $badgeCount }}</span>
         </div>
 
         {{-- Search input --}}

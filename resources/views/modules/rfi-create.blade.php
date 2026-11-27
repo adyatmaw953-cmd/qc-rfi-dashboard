@@ -339,9 +339,11 @@
                                     :name="$fieldName"
                                     :label="'Pilih ' . strtolower($field['label'])"
                                     :value="(string) ($currentVal ?? '')"
+                                    :displayText="(string) ($currentVal ?? '')"
                                     :placeholder="$sddLabel"
                                     :required="$required"
                                     :error="$err"
+                                    :sdd-type="$sddType"
                                     :data-sdd-type="$sddType"
                                 />
                                 @if($hint)
@@ -793,13 +795,27 @@
             const vsmCache = {};
             let vsmLoading = false;
 
-            function renderItems(listEl, items, query, emptyMsg) {
+            function renderItems(listEl, items, query, emptyMsg, customVal = '') {
                 const q = (query || '').trim().toLowerCase();
                 const filtered = q ? items.filter(it => it.label.toLowerCase().includes(q)) : items;
                 listEl.innerHTML = '';
 
-                if (!filtered.length) {
-                    listEl.innerHTML = `<li class="px-4 py-3 text-[13px] text-muted italic">${emptyMsg || 'Tidak ada hasil'}</li>`;
+                const trimmedCustom = (customVal || '').trim();
+                const exactMatch = trimmedCustom && items.some(it => it.label.toLowerCase() === trimmedCustom.toLowerCase());
+                if (trimmedCustom && !exactMatch) {
+                    const customLi = document.createElement('li');
+                    customLi.setAttribute('role', 'option');
+                    customLi.setAttribute('data-value', trimmedCustom);
+                    customLi.setAttribute('data-label', trimmedCustom);
+                    customLi.innerHTML = `<div class="flex items-center justify-between gap-2 px-4 py-3 cursor-pointer bg-brand/5 hover:bg-brand/10 transition border-b border-line/60">
+                        <span class="text-[14px] font-semibold text-brand leading-snug">+ Gunakan &ldquo;${escHtml(trimmedCustom)}&rdquo;</span>
+                        <span class="shrink-0 rounded-full bg-brand/20 px-2 py-0.5 text-[11px] font-semibold text-brand">Manual</span>
+                    </div>`;
+                    listEl.appendChild(customLi);
+                }
+
+                if (!filtered.length && (!trimmedCustom || exactMatch)) {
+                    listEl.innerHTML += `<li class="px-4 py-3 text-[13px] text-muted italic">${emptyMsg || 'Tidak ada hasil'}</li>`;
                     return;
                 }
 
@@ -812,7 +828,7 @@
                     // Build row: label + optional badge
                     let inner = `<span class="text-[14px] font-medium text-ink leading-snug">${escHtml(item.label)}</span>`;
                     if (item.badge) {
-                        inner += `<span class="shrink-0 rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand">${escHtml(item.badge)}</span>`;
+                        inner += `<span class="shrink-0 rounded-full bg-[#E9EFE5] border border-brand/30 px-2 py-0.5 text-[11px] font-semibold text-[#1F5B2A]">${escHtml(item.badge)}</span>`;
                     }
                     li.innerHTML = `<div class="flex items-center justify-between gap-2 px-4 py-3 cursor-pointer hover:bg-paper transition">${inner}</div>`;
                     listEl.appendChild(li);
@@ -832,7 +848,10 @@
                 const chevron = trigger.querySelector('svg');
                 if (chevron) chevron.style.transform = 'rotate(180deg)';
                 const searchInput = panel.querySelector('input[type="text"]');
-                if (searchInput) setTimeout(() => searchInput.focus(), 30);
+                if (searchInput) {
+                    searchInput.value = '';
+                    setTimeout(() => searchInput.focus(), 30);
+                }
             }
 
             function closePanel(root, trigger) {
@@ -856,7 +875,7 @@
 
             function clearItem(root, trigger, hiddenInput, displayEl, placeholder) {
                 hiddenInput.value = '';
-                displayEl.textContent = placeholder;
+                displayEl.textContent = displayEl.dataset.placeholder || placeholder;
                 displayEl.classList.remove('text-ink');
                 displayEl.classList.add('text-muted');
                 closePanel(root, trigger);
@@ -865,7 +884,7 @@
 
             function initSDD(rootEl) {
                 const id = rootEl.getAttribute('data-sdd-root');
-                const type = rootEl.querySelector('[data-sdd-type]')?.getAttribute('data-sdd-type') || 'static';
+                const type = rootEl.getAttribute('data-sdd-type') || rootEl.querySelector('[data-sdd-type]')?.getAttribute('data-sdd-type') || 'static';
                 const trigger = rootEl.querySelector(`#${id}_trigger`);
                 const panel = rootEl.querySelector(`#${id}_panel`);
                 const searchInput = rootEl.querySelector(`#${id}_search`);
@@ -874,37 +893,43 @@
                 const displayEl = rootEl.querySelector(`#${id}_display`);
                 const badgeEl = rootEl.querySelector(`#${id}_badge`);
                 const clearBtn = rootEl.querySelector('[data-sdd-clear]');
-                const placeholder = trigger?.querySelector('span')?.textContent?.trim() || '';
+                const placeholder = displayEl?.dataset?.placeholder || trigger?.querySelector('span')?.textContent?.trim() || '';
 
                 if (!trigger || !panel || !listEl || !hiddenInput) return;
 
                 let items = [];
 
                 // ---- Load data for a given type ----
-                async function loadItems(query) {
+                async function loadItems(query = '') {
                     if (type === 'static') {
                         // Project list from server-rendered PHP
                         items = projectItems;
                         renderItems(listEl, items, query, 'Tidak ada project');
-                        if (badgeEl) badgeEl.textContent = items.length + ' Project';
+                        if (badgeEl) {
+                            badgeEl.textContent = items.length + ' Project';
+                            badgeEl.classList.remove('hidden');
+                        }
 
                     } else if (type === 'api-vendor') {
-                        listEl.innerHTML = '<li class="px-4 py-3 text-[13px] text-muted italic">Memuat...</li>';
+                        listEl.innerHTML = '<li class="px-4 py-3 text-[13px] text-muted italic">Memuat supplier...</li>';
                         try {
                             const res = await fetch(`${supplierUrl}?search=${encodeURIComponent(query || '')}`, {
                                 headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
                             });
                             const data = res.ok ? await res.json() : [];
-                            items = Array.isArray(data) ? data.map(s => ({ value: s, label: s })) : [];
-                            renderItems(listEl, items, '', 'Tidak ada vendor');
-                            if (badgeEl) badgeEl.textContent = items.length + ' Vendor';
+                            items = Array.isArray(data) ? data.map(s => ({ value: s, label: s, badge: 'Supplier' })) : [];
+                            renderItems(listEl, items, '', 'Tidak ada supplier', query);
+                            if (badgeEl) {
+                                badgeEl.textContent = items.length + ' Supplier';
+                                badgeEl.classList.remove('hidden');
+                            }
                         } catch {
-                            listEl.innerHTML = '<li class="px-4 py-3 text-[13px] text-muted italic">Gagal memuat data</li>';
+                            listEl.innerHTML = '<li class="px-4 py-3 text-[13px] text-muted italic">Gagal memuat data supplier</li>';
                         }
 
                     } else if (type === 'vsm-material') {
                         // Will be populated when project changes — see project listener below
-                        renderItems(listEl, items, query, 'Pilih project terlebih dahulu');
+                        renderItems(listEl, items, query, 'Pilih project terlebih dahulu', query);
                     }
                 }
 
@@ -923,10 +948,16 @@
                         }
                     });
                     openPanel(rootEl, trigger);
-                    if (!items.length || type === 'api-vendor') {
-                        loadItems('');
-                    } else {
-                        renderItems(listEl, items, '', 'Tidak ada hasil');
+                    if (type === 'api-vendor') {
+                        loadItems(searchInput?.value || '');
+                    } else if (type === 'static') {
+                        if (!items.length) {
+                            loadItems('');
+                        } else {
+                            renderItems(listEl, items, searchInput?.value || '', 'Tidak ada project');
+                        }
+                    } else if (type === 'vsm-material') {
+                        renderItems(listEl, items, searchInput?.value || '', 'Pilih project terlebih dahulu', searchInput?.value || '');
                     }
                 });
 
@@ -938,7 +969,17 @@
                     if (type === 'api-vendor') {
                         debounce = setTimeout(() => loadItems(q), 300);
                     } else {
-                        renderItems(listEl, items, q, 'Tidak ada hasil');
+                        renderItems(listEl, items, q, 'Tidak ada hasil', q);
+                    }
+                });
+
+                searchInput?.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const firstOption = listEl.querySelector('li[data-value]');
+                        if (firstOption) {
+                            selectItem(rootEl, trigger, hiddenInput, displayEl, firstOption.dataset.value, firstOption.dataset.label);
+                        }
                     }
                 });
 
@@ -966,9 +1007,12 @@
                 rootEl._sddSetItems = function(newItems) {
                     items = newItems;
                     if (!panel.classList.contains('hidden')) {
-                        renderItems(listEl, items, searchInput?.value || '', 'Tidak ada hasil');
+                        renderItems(listEl, items, searchInput?.value || '', 'Tidak ada hasil', searchInput?.value || '');
                     }
-                    if (badgeEl) badgeEl.textContent = items.length;
+                    if (badgeEl) {
+                        badgeEl.textContent = items.length;
+                        badgeEl.classList.remove('hidden');
+                    }
                 };
 
                 // Initial static load for project
@@ -1021,7 +1065,7 @@
                     if (data) vsmCache[projectId] = data;
 
                     if (poRoot && poRoot._sddSetItems) {
-                        const poItems = (data?.po_numbers || []).map(v => ({ value: v, label: v }));
+                        const poItems = (data?.po_numbers || []).map(v => ({ value: v, label: v, badge: 'PO' }));
                         poRoot._sddSetItems(poItems);
                         // Auto-fill if single result and field is empty
                         const poHid = poRoot.querySelector('#details_po_no');
@@ -1035,7 +1079,7 @@
                     }
 
                     if (bomRoot && bomRoot._sddSetItems) {
-                        const bomItems = (data?.bom_numbers || []).map(v => ({ value: v, label: v }));
+                        const bomItems = (data?.bom_numbers || []).map(v => ({ value: v, label: v, badge: 'BOM' }));
                         bomRoot._sddSetItems(bomItems);
                         const bomHid = bomRoot.querySelector('#details_bom_no');
                         const bomDisp = bomRoot.querySelector('#details_bom_no_display');
