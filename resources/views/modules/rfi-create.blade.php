@@ -319,14 +319,19 @@
                             $showIfClass = $showIfName ? 'hidden' : null;
                         @endphp
 
-                        @if (in_array($field['name'], ['vendor', 'po_no', 'bom_no'], true))
+                        @if (in_array($field['name'], ['surat_jalan_no', 'vendor', 'po_no', 'bom_no'], true))
                             {{-- Searchable dropdown panel fields --}}
                             @php
-                                $sddType  = $field['name'] === 'vendor' ? 'api-vendor' : 'vsm-material';
+                                $sddType  = match($field['name']) {
+                                    'surat_jalan_no' => 'api-surat-jalan',
+                                    'vendor'         => 'api-vendor',
+                                    default          => 'vsm-material',
+                                };
                                 $sddLabel = match($field['name']) {
-                                    'vendor' => 'Cari vendor / supplier...',
-                                    'po_no'  => 'Cari PO No...',
-                                    default  => 'Cari BOM No...',
+                                    'surat_jalan_no' => 'Cari No Surat Jalan (IN-...)...',
+                                    'vendor'         => 'Cari vendor / supplier...',
+                                    'po_no'          => 'Cari PO No...',
+                                    default          => 'Cari BOM No...',
                                 };
                             @endphp
                             <div class="flex flex-col gap-[6px] {{ $showIfClass }}"
@@ -783,13 +788,22 @@
         // =========================================================
         (function () {
             const supplierUrl = @json(route('suppliers.search'));
+            const suratJalanUrl = @json(route('surat-jalan.search'));
             const materialsBaseUrl = @json(url('/projects'));
 
             // Static items for project dropdown
-            const projectItems = @json($projects->map(fn($p) => [
-                'value' => (string) $p->id,
-                'label' => $p->project_code . ' — ' . $p->project_name,
-            ])->values());
+            @php
+                $rfiProjectItemsData = $projects->map(fn($p) => [
+                    'value' => (string) $p->id,
+                    'label' => $p->project_code . ' — ' . $p->project_name,
+                    'title' => $p->project_name,
+                    'code' => $p->project_code,
+                    'category' => 'PROJECT',
+                    'metaLabel' => 'Customer',
+                    'metaValue' => $p->customer ?: '—',
+                ])->values();
+            @endphp
+            const projectItems = @json($rfiProjectItemsData);
 
             // VSM material cache keyed by projectId
             const vsmCache = {};
@@ -797,20 +811,41 @@
 
             function renderItems(listEl, items, query, emptyMsg, customVal = '') {
                 const q = (query || '').trim().toLowerCase();
-                const filtered = q ? items.filter(it => it.label.toLowerCase().includes(q)) : items;
+                const filtered = q ? items.filter(it => {
+                    const l = (it.label || '').toLowerCase();
+                    const t = (it.title || '').toLowerCase();
+                    const c = (it.code || '').toLowerCase();
+                    const m = (it.metaValue || '').toLowerCase();
+                    return l.includes(q) || t.includes(q) || c.includes(q) || m.includes(q);
+                }) : items;
                 listEl.innerHTML = '';
 
                 const trimmedCustom = (customVal || '').trim();
-                const exactMatch = trimmedCustom && items.some(it => it.label.toLowerCase() === trimmedCustom.toLowerCase());
+                const exactMatch = trimmedCustom && items.some(it => (it.value || '').toLowerCase() === trimmedCustom.toLowerCase() || (it.label || '').toLowerCase() === trimmedCustom.toLowerCase());
                 if (trimmedCustom && !exactMatch) {
                     const customLi = document.createElement('li');
                     customLi.setAttribute('role', 'option');
                     customLi.setAttribute('data-value', trimmedCustom);
                     customLi.setAttribute('data-label', trimmedCustom);
-                    customLi.innerHTML = `<div class="flex items-center justify-between gap-2 px-4 py-3 cursor-pointer bg-brand/5 hover:bg-brand/10 transition border-b border-line/60">
-                        <span class="text-[14px] font-semibold text-brand leading-snug">+ Gunakan &ldquo;${escHtml(trimmedCustom)}&rdquo;</span>
-                        <span class="shrink-0 rounded-full bg-brand/20 px-2 py-0.5 text-[11px] font-semibold text-brand">Manual</span>
-                    </div>`;
+                    customLi.innerHTML = `
+                        <div class="group rounded-xl border border-dashed border-emerald-400 bg-emerald-50/40 p-2.5 hover:border-emerald-600 hover:bg-emerald-50/70 transition cursor-pointer">
+                            <div class="flex items-center gap-2">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-800">
+                                    MANUAL
+                                </span>
+                                <span class="text-[13px] font-bold text-emerald-900 group-hover:text-emerald-700 transition truncate">
+                                    + Gunakan &ldquo;${escHtml(trimmedCustom)}&rdquo;
+                                </span>
+                            </div>
+                            <div class="mt-1.5 flex items-center justify-between text-[11px]">
+                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold text-emerald-700 bg-emerald-100/60 border border-emerald-200/60">
+                                    Input Kustom
+                                </span>
+                                <span class="text-slate-500 font-medium">
+                                    Ketik: <span class="font-bold text-[#1B6E41]">${escHtml(trimmedCustom)}</span>
+                                </span>
+                            </div>
+                        </div>`;
                     listEl.appendChild(customLi);
                 }
 
@@ -825,12 +860,33 @@
                     li.setAttribute('data-value', item.value);
                     li.setAttribute('data-label', item.label);
 
-                    // Build row: label + optional badge
-                    let inner = `<span class="text-[14px] font-medium text-ink leading-snug">${escHtml(item.label)}</span>`;
-                    if (item.badge) {
-                        inner += `<span class="shrink-0 rounded-full bg-[#E9EFE5] border border-brand/30 px-2 py-0.5 text-[11px] font-semibold text-[#1F5B2A]">${escHtml(item.badge)}</span>`;
-                    }
-                    li.innerHTML = `<div class="flex items-center justify-between gap-2 px-4 py-3 cursor-pointer hover:bg-paper transition">${inner}</div>`;
+                    const category = item.category || item.badge || 'ITEM';
+                    const title = item.title || item.label;
+                    const code = item.code || item.subLabel || '';
+                    const metaLabel = item.metaLabel || '';
+                    const metaValue = item.metaValue || '';
+
+                    li.innerHTML = `
+                        <div class="group rounded-xl border border-slate-200/90 bg-white p-2.5 hover:border-[#1B6E41] hover:bg-[#F6FAF7] hover:shadow-xs transition cursor-pointer">
+                            <div class="flex items-center gap-2">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-700">
+                                    ${escHtml(category)}
+                                </span>
+                                <span class="text-[13px] font-bold text-slate-900 group-hover:text-[#1B6E41] transition truncate">
+                                    ${escHtml(title)}
+                                </span>
+                            </div>
+                            <div class="mt-1.5 flex items-center justify-between gap-2 text-[11px]">
+                                ${code ? `
+                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold text-slate-600 bg-slate-100/80 border border-slate-200/60 truncate max-w-[190px]">
+                                    ${escHtml(code)}
+                                </span>` : '<span></span>'}
+                                ${metaValue ? `
+                                <div class="text-right truncate font-medium text-slate-500">
+                                    <span>${escHtml(metaLabel ? metaLabel + ': ' : '')}</span><span class="font-bold text-[#1B6E41]">${escHtml(metaValue)}</span>
+                                </div>` : ''}
+                            </div>
+                        </div>`;
                     listEl.appendChild(li);
                 });
             }
@@ -917,7 +973,18 @@
                                 headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
                             });
                             const data = res.ok ? await res.json() : [];
-                            items = Array.isArray(data) ? data.map(s => ({ value: s, label: s, badge: 'Supplier' })) : [];
+                            items = Array.isArray(data) ? data.map(s => {
+                                const name = typeof s === 'string' ? s : (s.name || s.supplier || '');
+                                return {
+                                    value: name,
+                                    label: name,
+                                    title: name,
+                                    code: 'API Material In',
+                                    category: 'SUPPLIER',
+                                    metaLabel: 'Status',
+                                    metaValue: 'Terverifikasi',
+                                };
+                            }) : [];
                             renderItems(listEl, items, '', 'Tidak ada supplier', query);
                             if (badgeEl) {
                                 badgeEl.textContent = items.length + ' Supplier';
@@ -925,6 +992,38 @@
                             }
                         } catch {
                             listEl.innerHTML = '<li class="px-4 py-3 text-[13px] text-muted italic">Gagal memuat data supplier</li>';
+                        }
+
+                    } else if (type === 'api-surat-jalan') {
+                        listEl.innerHTML = '<li class="px-4 py-3 text-[13px] text-muted italic">Memuat Surat Jalan...</li>';
+                        try {
+                            const res = await fetch(`${suratJalanUrl}?search=${encodeURIComponent(query || '')}`, {
+                                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+                            });
+                            const data = res.ok ? await res.json() : [];
+                            items = Array.isArray(data) ? data.map(item => {
+                                const refNo = typeof item === 'string' ? item : item.reference_number;
+                                const supplier = typeof item === 'object' && item?.supplier ? item.supplier : '';
+                                const po = typeof item === 'object' && item?.po_number ? item.po_number : '';
+                                const date = typeof item === 'object' && item?.date ? item.date : '';
+                                return {
+                                    value: refNo,
+                                    label: refNo,
+                                    title: refNo,
+                                    code: supplier || 'QC Material In',
+                                    category: 'SURAT JALAN',
+                                    metaLabel: po ? 'PO' : (date ? 'Tgl' : 'QC'),
+                                    metaValue: po || date || 'Verified',
+                                    extra: item,
+                                };
+                            }) : [];
+                            renderItems(listEl, items, '', 'Tidak ada Surat Jalan ditemukan', query);
+                            if (badgeEl) {
+                                badgeEl.textContent = items.length + ' Surat Jalan';
+                                badgeEl.classList.remove('hidden');
+                            }
+                        } catch {
+                            listEl.innerHTML = '<li class="px-4 py-3 text-[13px] text-muted italic">Gagal memuat data Surat Jalan</li>';
                         }
 
                     } else if (type === 'vsm-material') {
@@ -948,7 +1047,7 @@
                         }
                     });
                     openPanel(rootEl, trigger);
-                    if (type === 'api-vendor') {
+                    if (type === 'api-vendor' || type === 'api-surat-jalan') {
                         loadItems(searchInput?.value || '');
                     } else if (type === 'static') {
                         if (!items.length) {
@@ -966,7 +1065,7 @@
                 searchInput?.addEventListener('input', () => {
                     clearTimeout(debounce);
                     const q = searchInput.value;
-                    if (type === 'api-vendor') {
+                    if (type === 'api-vendor' || type === 'api-surat-jalan') {
                         debounce = setTimeout(() => loadItems(q), 300);
                     } else {
                         renderItems(listEl, items, q, 'Tidak ada hasil', q);
@@ -988,6 +1087,23 @@
                     const li = e.target.closest('li[data-value]');
                     if (!li) return;
                     selectItem(rootEl, trigger, hiddenInput, displayEl, li.dataset.value, li.dataset.label);
+
+                    // If surat jalan has supplier, auto-fill vendor if vendor is empty
+                    if (type === 'api-surat-jalan') {
+                        const matched = items.find(it => it.value === li.dataset.value);
+                        const supplierName = matched?.extra?.supplier;
+                        if (supplierName) {
+                            const vendorRoot = document.querySelector('[data-sdd-root="details_vendor"]');
+                            if (vendorRoot) {
+                                const vendorHid = vendorRoot.querySelector('#details_vendor');
+                                const vendorDisp = vendorRoot.querySelector('#details_vendor_display');
+                                const vendorTrig = vendorRoot.querySelector('#details_vendor_trigger');
+                                if (vendorHid && vendorDisp && !vendorHid.value) {
+                                    selectItem(vendorRoot, vendorTrig, vendorHid, vendorDisp, supplierName, supplierName);
+                                }
+                            }
+                        }
+                    }
                 });
 
                 // ---- Clear ----
@@ -1004,13 +1120,13 @@
                 });
 
                 // ---- Expose update API for external callers (VSM PO/BOM) ----
-                rootEl._sddSetItems = function(newItems) {
+                rootEl._sddSetItems = function(newItems, countSuffix = '') {
                     items = newItems;
                     if (!panel.classList.contains('hidden')) {
                         renderItems(listEl, items, searchInput?.value || '', 'Tidak ada hasil', searchInput?.value || '');
                     }
                     if (badgeEl) {
-                        badgeEl.textContent = items.length;
+                        badgeEl.textContent = items.length + (countSuffix ? ' ' + countSuffix : '');
                         badgeEl.classList.remove('hidden');
                     }
                 };
@@ -1041,7 +1157,7 @@
                         disp.classList.add('text-muted');
                         disp.classList.remove('text-ink');
                     }
-                    if (r._sddSetItems) r._sddSetItems([]);
+                    if (r._sddSetItems) r._sddSetItems([], '');
                     const listEl = r.querySelector(`#${r.getAttribute('data-sdd-root')}_list`);
                     if (listEl) listEl.innerHTML = '<li class="px-4 py-3 text-[13px] text-muted italic">Memuat...</li>';
                 });
@@ -1051,7 +1167,7 @@
                         if (!r) return;
                         const listEl = r.querySelector(`#${r.getAttribute('data-sdd-root')}_list`);
                         if (listEl) listEl.innerHTML = '<li class="px-4 py-3 text-[13px] text-muted italic">Pilih project terlebih dahulu</li>';
-                        if (r._sddSetItems) r._sddSetItems([]);
+                        if (r._sddSetItems) r._sddSetItems([], '');
                     });
                     return;
                 }
@@ -1064,9 +1180,20 @@
 
                     if (data) vsmCache[projectId] = data;
 
+                    const currentProj = projectItems.find(p => p.value === String(projectId));
+                    const pCode = currentProj?.code || 'VSM';
+
                     if (poRoot && poRoot._sddSetItems) {
-                        const poItems = (data?.po_numbers || []).map(v => ({ value: v, label: v, badge: 'PO' }));
-                        poRoot._sddSetItems(poItems);
+                        const poItems = (data?.po_numbers || []).map(v => ({
+                            value: v,
+                            label: v,
+                            title: v,
+                            code: pCode,
+                            category: 'PO NUMBER',
+                            metaLabel: 'Tipe',
+                            metaValue: 'Material PO',
+                        }));
+                        poRoot._sddSetItems(poItems, 'PO');
                         // Auto-fill if single result and field is empty
                         const poHid = poRoot.querySelector('#details_po_no');
                         const poDisp = poRoot.querySelector('#details_po_no_display');
@@ -1079,8 +1206,16 @@
                     }
 
                     if (bomRoot && bomRoot._sddSetItems) {
-                        const bomItems = (data?.bom_numbers || []).map(v => ({ value: v, label: v, badge: 'BOM' }));
-                        bomRoot._sddSetItems(bomItems);
+                        const bomItems = (data?.bom_numbers || []).map(v => ({
+                            value: v,
+                            label: v,
+                            title: v,
+                            code: pCode,
+                            category: 'BOM NO',
+                            metaLabel: 'Tipe',
+                            metaValue: 'Bill of Material',
+                        }));
+                        bomRoot._sddSetItems(bomItems, 'BOM');
                         const bomHid = bomRoot.querySelector('#details_bom_no');
                         const bomDisp = bomRoot.querySelector('#details_bom_no_display');
                         if (bomHid && bomDisp && !bomHid.value && bomItems.length === 1) {

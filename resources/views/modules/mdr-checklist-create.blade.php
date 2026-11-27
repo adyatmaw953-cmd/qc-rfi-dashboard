@@ -184,10 +184,18 @@
     <script>
         // SDD init for project_id (static list)
         (function () {
-            const projectItems = @json($projects->map(fn($p) => [
-                'value' => (string) $p->id,
-                'label' => ($p->project_code ? $p->project_code . ' — ' : '') . $p->project_name,
-            ])->values());
+            @php
+                $mdrProjectItemsData = $projects->map(fn($p) => [
+                    'value' => (string) $p->id,
+                    'label' => ($p->project_code ? $p->project_code . ' — ' : '') . $p->project_name,
+                    'title' => $p->project_name,
+                    'code' => $p->project_code ?: '-',
+                    'category' => 'PROJECT',
+                    'metaLabel' => 'Customer',
+                    'metaValue' => $p->customer ?: '—',
+                ])->values();
+            @endphp
+            const projectItems = @json($mdrProjectItemsData);
 
             const projectMapMdr = {};
             @foreach ($projects as $p)
@@ -211,7 +219,13 @@
 
             function renderItems(listEl, items, query) {
                 const q = (query || '').trim().toLowerCase();
-                const filtered = q ? items.filter(it => it.label.toLowerCase().includes(q)) : items;
+                const filtered = q ? items.filter(it => {
+                    const l = (it.label || '').toLowerCase();
+                    const t = (it.title || '').toLowerCase();
+                    const c = (it.code || '').toLowerCase();
+                    const m = (it.metaValue || '').toLowerCase();
+                    return l.includes(q) || t.includes(q) || c.includes(q) || m.includes(q);
+                }) : items;
                 listEl.innerHTML = '';
                 if (!filtered.length) {
                     listEl.innerHTML = '<li class="px-4 py-3 text-[13px] text-muted italic">Tidak ada project</li>';
@@ -222,7 +236,34 @@
                     li.setAttribute('role', 'option');
                     li.setAttribute('data-value', item.value);
                     li.setAttribute('data-label', item.label);
-                    li.innerHTML = `<div class="flex items-center px-4 py-3 cursor-pointer hover:bg-paper transition"><span class="text-[14px] font-medium text-ink leading-snug">${escHtml(item.label)}</span></div>`;
+
+                    const category = item.category || 'PROJECT';
+                    const title = item.title || item.label;
+                    const code = item.code || '';
+                    const metaLabel = item.metaLabel || 'Customer';
+                    const metaValue = item.metaValue || '';
+
+                    li.innerHTML = `
+                        <div class="group rounded-xl border border-slate-200/90 bg-white p-2.5 hover:border-[#1B6E41] hover:bg-[#F6FAF7] hover:shadow-xs transition cursor-pointer">
+                            <div class="flex items-center gap-2">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-700">
+                                    ${escHtml(category)}
+                                </span>
+                                <span class="text-[13px] font-bold text-slate-900 group-hover:text-[#1B6E41] transition truncate">
+                                    ${escHtml(title)}
+                                </span>
+                            </div>
+                            <div class="mt-1.5 flex items-center justify-between gap-2 text-[11px]">
+                                ${code ? `
+                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold text-slate-600 bg-slate-100/80 border border-slate-200/60 truncate max-w-[190px]">
+                                    ${escHtml(code)}
+                                </span>` : '<span></span>'}
+                                ${metaValue ? `
+                                <div class="text-right truncate font-medium text-slate-500">
+                                    <span>${escHtml(metaLabel ? metaLabel + ': ' : '')}</span><span class="font-bold text-[#1B6E41]">${escHtml(metaValue)}</span>
+                                </div>` : ''}
+                            </div>
+                        </div>`;
                     listEl.appendChild(li);
                 });
             }

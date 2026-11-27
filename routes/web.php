@@ -10,6 +10,7 @@ use App\Http\Controllers\ProjectMaterialController;
 use App\Http\Controllers\QcFindingController;
 use App\Http\Controllers\RfiController;
 use App\Http\Controllers\SupplierSearchController;
+use App\Http\Controllers\SuratJalanSearchController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -39,6 +40,7 @@ Route::middleware(['auth', 'role:admin|production|qc_qa|warehouse|ppic'])->group
     Route::post('/notifications/{id}/read', [NotificationController::class, 'read'])->name('notifications.read');
 
     Route::get('/suppliers/search', SupplierSearchController::class)->name('suppliers.search');
+    Route::get('/surat-jalan/search', SuratJalanSearchController::class)->name('surat-jalan.search');
     Route::get('/projects/{project}/materials', ProjectMaterialController::class)->name('projects.materials');
 
     Route::get('/rfi', [RfiController::class, 'index'])
